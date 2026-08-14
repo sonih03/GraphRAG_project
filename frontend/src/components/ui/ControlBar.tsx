@@ -2,18 +2,20 @@
 
 import { useState } from 'react';
 import { GlassCard } from './GlassCard';
-import { Search, Sparkles, Mic, Globe, BarChart3, RotateCcw } from 'lucide-react';
+import { Search, Sparkles, Mic, Globe, GitPullRequest, BarChart3, RotateCcw, Loader2 } from 'lucide-react';
 import { GraphSystemState } from '@/types/graph';
 
 interface ControlBarProps {
   currentState: GraphSystemState;
   onSetState: (nextState: GraphSystemState) => void;
+  onQueryResult?: (data: any) => void;
 }
 
-export function ControlBar({ currentState, onSetState }: ControlBarProps) {
+export function ControlBar({ currentState, onSetState, onQueryResult }: ControlBarProps) {
   const [query, setQuery] = useState('');
+  const [loading, setLoading] = useState(false);
 
-  // Focused 3 prompt chips
+  // 4 Focused prompt chips
   const chips: { label: string; state: GraphSystemState; icon: any; queryText: string }[] = [
     {
       label: '기본 구체 (IDLE)',
@@ -28,6 +30,12 @@ export function ControlBar({ currentState, onSetState }: ControlBarProps) {
       queryText: '전체 데이터베이스 구조 보여줘',
     },
     {
+      label: 'GraphRAG 연관 탐색',
+      state: 'STATE_GRAPH_TRAVERSAL',
+      icon: GitPullRequest,
+      queryText: 'GraphRAG로 제13조 연관 구조 보여줘',
+    },
+    {
       label: '성능 벤치마크',
       state: 'STATE_BENCHMARK_RADAR',
       icon: BarChart3,
@@ -35,25 +43,52 @@ export function ControlBar({ currentState, onSetState }: ControlBarProps) {
     },
   ];
 
-  const handleExecuteQuery = (textToProcess?: string) => {
-    const raw = (textToProcess !== undefined ? textToProcess : query).trim().toLowerCase();
+  const handleExecuteQuery = async (textToProcess?: string) => {
+    const raw = (textToProcess !== undefined ? textToProcess : query).trim();
+    const lower = raw.toLowerCase();
+
     if (!raw) {
       onSetState('STATE_IDLE');
       return;
     }
 
-    if (raw.includes('전체') || raw.includes('은하') || raw.includes('galaxy') || raw.includes('db')) {
+    if (lower.includes('전체') || lower.includes('은하') || lower.includes('galaxy') || lower.includes('db')) {
       onSetState('STATE_GALAXY_VIEW');
-    } else if (raw.includes('벤치마크') || raw.includes('수치') || raw.includes('benchmark') || raw.includes('radar')) {
+      return;
+    } else if (lower.includes('벤치마크') || lower.includes('수치') || lower.includes('benchmark') || lower.includes('radar')) {
       onSetState('STATE_BENCHMARK_RADAR');
-    } else {
-      onSetState('STATE_IDLE');
+      return;
+    }
+
+    // GraphRAG / Article query -> Call real backend API
+    setLoading(true);
+    try {
+      const res = await fetch('http://localhost:8000/api/query', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: raw, mode: 'hybrid' }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (onQueryResult) onQueryResult(data);
+      }
+      onSetState('STATE_GRAPH_TRAVERSAL');
+    } catch (err) {
+      console.warn('Backend query fallback:', err);
+      onSetState('STATE_GRAPH_TRAVERSAL');
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleChipClick = (chip: (typeof chips)[0]) => {
     setQuery(chip.queryText);
-    onSetState(chip.state);
+    if (chip.state === 'STATE_GRAPH_TRAVERSAL') {
+      handleExecuteQuery(chip.queryText);
+    } else {
+      onSetState(chip.state);
+    }
   };
 
   return (
@@ -85,7 +120,7 @@ export function ControlBar({ currentState, onSetState }: ControlBarProps) {
         {/* Main Search / Voice Trigger Bar */}
         <GlassCard glow className="pointer-events-auto p-2 flex items-center gap-2 border-cyan-500/30 bg-zinc-900/85 shadow-2xl shadow-cyan-950/40">
           <div className="pl-3 text-cyan-400">
-            <Search className="w-4 h-4" />
+            {loading ? <Loader2 className="w-4 h-4 animate-spin text-cyan-400" /> : <Search className="w-4 h-4" />}
           </div>
           <input
             type="text"
@@ -94,7 +129,7 @@ export function ControlBar({ currentState, onSetState }: ControlBarProps) {
             onKeyDown={(e) => {
               if (e.key === 'Enter') handleExecuteQuery();
             }}
-            placeholder="명령어 입력 (예: '전체 데이터베이스 구조 보여줘', '벤치마크 성능 수치 보여줘')..."
+            placeholder="명령어 입력 (예: 'GraphRAG로 제13조 연관 구조 보여줘', '전체 데이터베이스 구조 보여줘')..."
             className="flex-1 bg-transparent border-none outline-none text-xs md:text-sm text-slate-100 placeholder-slate-500 font-mono px-2 py-1"
           />
           <button
@@ -106,11 +141,12 @@ export function ControlBar({ currentState, onSetState }: ControlBarProps) {
           </button>
           <button
             type="button"
+            disabled={loading}
             onClick={() => handleExecuteQuery()}
-            className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-sky-600 hover:from-cyan-400 hover:to-sky-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/25 active:scale-95 cursor-pointer"
+            className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-500 to-sky-600 hover:from-cyan-400 hover:to-sky-500 text-white font-semibold text-xs flex items-center gap-1.5 transition-all shadow-lg shadow-cyan-500/25 active:scale-95 cursor-pointer disabled:opacity-50"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span>실행</span>
+            <span>{loading ? '추론 중...' : '질의 실행'}</span>
           </button>
         </GlassCard>
 
@@ -119,7 +155,7 @@ export function ControlBar({ currentState, onSetState }: ControlBarProps) {
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
-              <span>5,000 Points Real-time Morphing</span>
+              <span>Neo4j 301 Nodes • Live Backend</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />

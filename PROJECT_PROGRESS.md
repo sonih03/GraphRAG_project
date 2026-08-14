@@ -28,9 +28,14 @@
 ## 📂 3. 생성된 파일 레지스트리 (File Registry)
 
 ### Root (`/`)
+- `docker-compose.yml`: Neo4j 5.19 (APOC 플러그인 포함) 및 볼륨 마운트 컨테이너 구성
+- `.env`: Neo4j 계정 정보 및 AI API 키 환경 변수 (Git 무시)
+- `.env.example`: 환경 변수 템플릿 파일
+- `.gitignore`: node_modules, .next, .env, __pycache__ 등 제외 설정
 - `package.json`: 루트 터미널에서 `npm run dev`, `npm run build`를 실행하기 위한 스크립트 래퍼
 - `PROJECT_CONTEXT.md`: 프로젝트 전체 아키텍처 및 6대 상태 머신 요구사항 명세서
 - `PROJECT_PROGRESS.md`: 현재 작업 진행 현황 및 파일 레지스트리 (본 문서)
+
 
 ### Frontend (`frontend/`)
 - `package.json`: Next.js 16, Three.js, R3F, Framer Motion, Lucide, Tailwind 의존성 정의
@@ -38,19 +43,20 @@
 - `src/lib/constants/graphConfig.ts`: 3D 구체 반경, 색상, 애니메이션 파라미터 상수
 - `src/lib/utils/math.ts`: 구면 좌표 및 피보나치 기하 계산 유틸
 - `src/lib/utils/cn.ts`: Tailwind 클래스 병합 유틸 (`clsx` + `tailwind-merge`)
-- `src/hooks/useSphereGeometry.ts`: 피보나치 구면 기하 연산 훅
 - `src/components/canvas/GraphCanvas.tsx`: R3F Canvas 루트 컨테이너 (조명, 카메라, 씬 배치)
-- `src/components/canvas/NoiseWaveSphere.tsx`: 5,000개 유기적 불규칙 흩뿌림 입자 & 실시간 3D 하모닉 미세 파동 연산 컴포넌트
-- `src/components/canvas/IdleSphereGraph.tsx`: `STATE_IDLE` 5,000개 노드 구체 래퍼
-- `src/components/canvas/CameraController.tsx`: OrbitControls 댐핑 제어
-- `src/components/canvas/SphereConnections.tsx`: 노드 간 엣지 라인 컴포넌트 (트랜지션용 대기)
-- `src/components/canvas/ParticleBackground.tsx`: 배경 우주 성운 파티클 스타필드 (트랜지션용 대기)
+- `src/components/canvas/MorphingGraphUniverse.tsx`: 5,000개 고밀도 입자 구체 ↔ 5-Arm 은하 ↔ 트래버설 통합 모핑 렌더러
+- `src/components/canvas/LaserTraversalEdges.tsx`: 제13조 ➔ 14·15·16조 초록/빨강 3D 레이저 빔 애니메이션
+- `src/components/canvas/Article3DLabels.tsx`: 3D 공간 상의 법률 조문 HTML 빌보드 라벨
+- `src/components/canvas/CameraController.tsx`: 상태별 부드러운 카메라 시점 줌인/줌아웃 Lerp 제어
 - `src/components/ui/GlassCard.tsx`: 글래스모피즘 컨테이너 카드
 - `src/components/ui/StatusBadge.tsx`: 6대 시스템 상태 인디케이터 뱃지
 - `src/components/ui/Header.tsx`: 상단 브랜드 및 시스템 텔레메트리 헤더
-- `src/components/ui/ControlBar.tsx`: 하단 법률 쿼리 및 음성 마이크 제어바
+- `src/components/ui/ControlBar.tsx`: 하단 법률 쿼리 및 백엔드 API 연동 제어바
+- `src/components/overlays/OverlayManager.tsx`: Framer-Motion 기반 오버레이 관리자
+- `src/components/overlays/BenchmarkRadarOverlay.tsx`: 성능 벤치마크 레이더 차트 대시보드
 - `src/app/page.tsx`: 메인 대시보드 뷰
 - `src/app/layout.tsx` / `globals.css`: 다크 테마 전역 레이아웃 및 스타일
+
 
 ### Backend (`backend/`)
 - `requirements.txt`: FastAPI, Uvicorn, Neo4j, Groq, Pydantic, Pydantic-settings, python-dotenv, httpx
@@ -75,11 +81,13 @@
 - [x] **Step 3**: `STATE_IDLE` 3D Canvas 구현 (5,000개 고밀도 미세 노드가 촘촘하게 흩뿌려져 은은한 파동으로 자전하는 실키 포인트 클라우드 구체 완성)
 - [x] **Step 4**: 프로젝트 루트 `package.json` 추가로 루트 터미널에서 `npm run dev` 및 `npm run build` 직접 실행 지원
 - [x] **Step 5**: 브라우저 서브에이전트(CDP) 스크린샷 자가 검증 (초미세 입자 60fps 부드러운 렌더링 확인)
-- [x] **Step 6**: 핵심 상태 2종(`STATE_GALAXY_VIEW`, `STATE_BENCHMARK_RADAR`) 및 `STATE_IDLE` 구체 간 부드러운 60fps 모핑/오버레이 전환 안정화
-- [ ] **Step 7**: PDF 법률 데이터 추출 & Gemini API Structured Output -> Neo4j MERGE 적재 파이썬 파이프라인 구축
-- [ ] **Step 8**: 단계별로 3D Vector Search 및 Graph Traversal 인터랙션 추가 구현
-- [ ] **Step 9**: Groq Whisper STT 법률 용어 프롬프트 음성 인식 연동 & WebSocket/SSE 실시간 상태 트리거
-- [ ] **Step 10**: 전체 프론트엔드/백엔드 유닛 테스트 작성 및 100% 통과 검증
+- [x] **Step 6**: 핵심 상태 3종(`STATE_GALAXY_VIEW`, `STATE_GRAPH_TRAVERSAL`, `STATE_BENCHMARK_RADAR`) 및 `STATE_IDLE` 구체 간 부드러운 60fps 모핑 전환 안정화
+- [x] **Step 7**: FastAPI 서버(포트 8000) 구동 및 Neo4j 실데이터(301개 노드, EXCEPT_IF/MUTATIS_MUTANDIS 엣지) 연동 `POST /api/query` 엔드포인트 검증 완료
+- [x] **Step 8**: 프론트엔드-백엔드 실시간 API 연동 및 제13조 3D Graph Traversal 레이저 빔 연쇄 발사 브라우저(CDP) 자가 검증 완료
+- [ ] **Step 9**: PDF 법률 데이터 추출 & Gemini API Structured Output -> Neo4j MERGE 적재 파이썬 파이프라인 확장
+- [ ] **Step 10**: Groq Whisper STT 법률 용어 프롬프트 음성 인식 연동 & WebSocket/SSE 실시간 상태 트리거
+- [ ] **Step 11**: 전체 프론트엔드/백엔드 유닛 테스트 작성 및 100% 통과 검증
+
 
 
 ---

@@ -4,10 +4,13 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GraphSystemState } from '@/types/graph';
+import { LaserTraversalEdges } from './LaserTraversalEdges';
+import { Article3DLabels } from './Article3DLabels';
 
 interface MorphingGraphUniverseProps {
   state: GraphSystemState;
   pointCount?: number;
+  subgraphData?: any;
 }
 
 // Low-frequency gentle micro-wave displacement that keeps the spherical silhouette stable
@@ -115,6 +118,7 @@ export function MorphingGraphUniverse({
     const time = Date.now() * 0.0008;
     const isGalaxy = state === 'STATE_GALAXY_VIEW';
     const isBenchmark = state === 'STATE_BENCHMARK_RADAR';
+    const isTraversal = state === 'STATE_GRAPH_TRAVERSAL';
 
     // Interpolate morph target (0 for sphere, 1 for galaxy)
     const targetProgress = isGalaxy ? 1.0 : 0.0;
@@ -132,6 +136,10 @@ export function MorphingGraphUniverse({
       groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0.45, 2.0, delta);
     } else if (isBenchmark) {
       groupRef.current.rotation.y += delta * 0.02;
+    } else if (isTraversal) {
+      // Focus on traversal view with subtle movement
+      groupRef.current.rotation.y = THREE.MathUtils.damp(groupRef.current.rotation.y, 0, 2.5, delta);
+      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0, 2.5, delta);
     } else {
       // IDLE: Serene continuous rotation
       groupRef.current.rotation.y += delta * 0.07;
@@ -186,6 +194,11 @@ export function MorphingGraphUniverse({
         targetR = 0.05;
         targetG = 0.15;
         targetB = 0.25;
+      } else if (isTraversal) {
+        // Starfield background during traversal
+        targetR = 0.05;
+        targetG = 0.40;
+        targetB = 0.65;
       } else {
         const norm = (sDisplacement + 0.05) / 0.10;
         const clampedNorm = Math.max(0, Math.min(1, norm));
@@ -217,7 +230,7 @@ export function MorphingGraphUniverse({
           />
         </bufferGeometry>
         <pointsMaterial
-          size={state === 'STATE_GALAXY_VIEW' ? 0.038 : 0.026}
+          size={state === 'STATE_GALAXY_VIEW' ? 0.038 : state === 'STATE_GRAPH_TRAVERSAL' ? 0.020 : 0.026}
           vertexColors
           transparent
           opacity={0.92}
@@ -226,6 +239,12 @@ export function MorphingGraphUniverse({
           depthWrite={false}
         />
       </points>
+
+      {/* 3D Laser Traversal Beams when in STATE_GRAPH_TRAVERSAL */}
+      {state === 'STATE_GRAPH_TRAVERSAL' && <LaserTraversalEdges />}
+
+      {/* 3D Floating Article Labels when in STATE_GRAPH_TRAVERSAL */}
+      {state === 'STATE_GRAPH_TRAVERSAL' && <Article3DLabels state={state} />}
     </group>
   );
 }

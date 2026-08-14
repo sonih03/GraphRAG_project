@@ -18,12 +18,16 @@ export function CameraController({ state }: CameraControllerProps) {
   // Target camera position based on current state
   const targetCamPos = useRef(new THREE.Vector3(0, 0, 7.5));
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
+  const isTransitioning = useRef(true);
 
+  // Trigger smooth transition whenever state changes
   useEffect(() => {
+    isTransitioning.current = true;
+
     switch (state) {
       case 'STATE_GALAXY_VIEW':
         // Zoom-out for expansive galaxy view
-        targetCamPos.current.set(0, 4.5, 12.0);
+        targetCamPos.current.set(0, 3.5, 12.0);
         targetLookAt.current.set(0, 0, 0);
         break;
       case 'STATE_GRAPH_TRAVERSAL':
@@ -45,25 +49,52 @@ export function CameraController({ state }: CameraControllerProps) {
     }
   }, [state]);
 
-  useFrame((_, delta) => {
-    // Smooth, cinematic spring/damping camera position interpolation
-    camera.position.lerp(targetCamPos.current, 3.5 * delta);
+  // Allow immediate user override on mouse/touch interaction
+  useEffect(() => {
+    const controls = controlsRef.current;
+    if (!controls) return;
 
-    if (controlsRef.current) {
+    const handleUserStart = () => {
+      // If user drags or scrolls, stop auto-camera transition immediately
+      isTransitioning.current = false;
+    };
+
+    controls.addEventListener('start', handleUserStart);
+    return () => {
+      controls.removeEventListener('start', handleUserStart);
+    };
+  }, []);
+
+  useFrame((_, delta) => {
+    if (!controlsRef.current) return;
+
+    // Only interpolate camera when an automated state transition is active
+    if (isTransitioning.current) {
+      camera.position.lerp(targetCamPos.current, 3.5 * delta);
       controlsRef.current.target.lerp(targetLookAt.current, 3.5 * delta);
-      controlsRef.current.update();
+
+      // Once close enough, yield full control to user interactions
+      if (camera.position.distanceTo(targetCamPos.current) < 0.04) {
+        isTransitioning.current = false;
+      }
     }
+
+    controlsRef.current.update();
   });
 
   return (
     <OrbitControls
       ref={controlsRef}
+      makeDefault
+      enableRotate={true}
       enableZoom={true}
-      enablePan={false}
-      minDistance={2.5}
-      maxDistance={20.0}
-      dampingFactor={0.05}
-      enableDamping
+      enablePan={true}
+      zoomSpeed={1.2}
+      rotateSpeed={0.9}
+      minDistance={1.2}
+      maxDistance={35.0}
+      dampingFactor={0.08}
+      enableDamping={true}
     />
   );
 }

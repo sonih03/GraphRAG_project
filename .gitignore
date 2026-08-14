@@ -18,6 +18,12 @@ env/
 *.env
 backend/.env
 
+# Neo4j Database & Runtime Data
+backend/data/
+data/
+*.log
+*.jar
+
 # IDE / OS files
 .DS_Store
 Thumbs.db
