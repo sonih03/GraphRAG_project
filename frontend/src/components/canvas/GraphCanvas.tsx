@@ -4,13 +4,14 @@ import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { MorphingGraphUniverse } from './MorphingGraphUniverse';
 import { CameraController } from './CameraController';
-import { GraphSystemState } from '@/types/graph';
+import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
 
 interface GraphCanvasProps {
   state: GraphSystemState;
+  subgraphData?: DynamicSubgraphData | null;
 }
 
-export function GraphCanvas({ state }: GraphCanvasProps) {
+export function GraphCanvas({ state, subgraphData }: GraphCanvasProps) {
   return (
     <div className="relative w-full h-full min-h-[600px] overflow-hidden bg-black">
       {/* Dynamic Ambient Vignette */}
@@ -25,11 +26,11 @@ export function GraphCanvas({ state }: GraphCanvasProps) {
 
         <Suspense fallback={null}>
           {/* Central 5,000 Particle Morphing Engine */}
-          <MorphingGraphUniverse state={state} pointCount={5000} />
+          <MorphingGraphUniverse state={state} pointCount={5000} subgraphData={subgraphData} />
         </Suspense>
 
         {/* Dynamic Smooth Lerp Camera */}
-        <CameraController state={state} />
+        <CameraController state={state} subgraphData={subgraphData} />
       </Canvas>
     </div>
   );

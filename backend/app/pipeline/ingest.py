@@ -63,14 +63,19 @@ def run_ingestion(file_path: str):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ingest Korean Civil Law into Neo4j Graph Database")
-    parser.add_argument("--file", type=str, default="civil_law.txt", help="Path to civil_law.txt")
+    parser.add_argument("--file", type=str, default="data/civil_law.txt", help="Path to civil_law.txt")
     args = parser.parse_args()
 
-    # Find file path relative to backend or current working dir
+    # Find file path relative to backend/data or current working dir
     target_path = args.file
     if not os.path.exists(target_path):
         alt_path = os.path.join(backend_dir, args.file)
         if os.path.exists(alt_path):
             target_path = alt_path
+        else:
+            # Fallback to backend/data/civil_law.txt
+            default_data_path = os.path.join(backend_dir, "data", "civil_law.txt")
+            if os.path.exists(default_data_path):
+                target_path = default_data_path
 
     run_ingestion(target_path)

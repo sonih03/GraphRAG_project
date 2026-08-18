@@ -57,3 +57,7 @@ async def root_query_graphrag(request: QueryRequest):
 async def root_health():
     neo4j_ok = neo4j_service.check_connection()
     return {"status": "online", "neo4j_connected": neo4j_ok}
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run("app.main:app", host="0.0.0.0", port=8000, reload=True)

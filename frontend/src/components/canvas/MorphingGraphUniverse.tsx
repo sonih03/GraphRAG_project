@@ -3,27 +3,44 @@
 import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
-import { GraphSystemState } from '@/types/graph';
+import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
 import { LaserTraversalEdges } from './LaserTraversalEdges';
 import { Article3DLabels } from './Article3DLabels';
 import { FullGraphNetworkEdges } from './FullGraphNetworkEdges';
-import { getOrganicDisplacement, generateSpherePositions, generateOverviewPositions } from '@/lib/utils/math';
+import {
+  getOrganicDisplacement,
+  generateSpherePositions,
+  generateOverviewPositions,
+  getInvolvedClusterIndices,
+} from '@/lib/utils/math';
 import { IDLE_SPHERE_CONFIG, GALAXY_CONFIG } from '@/lib/constants/graphConfig';
 
 interface MorphingGraphUniverseProps {
   state: GraphSystemState;
   pointCount?: number;
-  subgraphData?: any;
+  subgraphData?: DynamicSubgraphData | null;
 }
 
 export function MorphingGraphUniverse({
   state,
   pointCount = IDLE_SPHERE_CONFIG.nodeCount,
+  subgraphData,
 }: MorphingGraphUniverseProps) {
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
 
-  // Precompute 3D Target Coordinate Layouts (Single Sphere vs 5-Part Knowledge Graph Network)
+  // Identify active participating clusters in current query
+  const activeClustersSet = useMemo(() => {
+    const rawNodes = subgraphData?.nodes || [];
+    const artNumbers = rawNodes.map((n) => {
+      const match = n.id.match(/(\d+)/) || (n.articleNumber && n.articleNumber.match(/(\d+)/));
+      return match ? parseInt(match[1], 10) : 13;
+    });
+    const indices = getInvolvedClusterIndices(artNumbers.length > 0 ? artNumbers : [13]);
+    return new Set(indices);
+  }, [subgraphData]);
+
+  // Precompute 3D Target Coordinate Layouts
   const { spherePositions, overviewPositions, pointJitters } = useMemo(() => {
     const { spherePositions: sPos, pointJitters: jitters } = generateSpherePositions(pointCount, IDLE_SPHERE_CONFIG.radius);
     const oPos = generateOverviewPositions(pointCount);
@@ -59,10 +76,10 @@ export function MorphingGraphUniverse({
     const time = Date.now() * 0.0008;
     const isOverview = state === 'STATE_GALAXY_VIEW';
     const isBenchmark = state === 'STATE_BENCHMARK_RADAR';
-    const isTraversal = state === 'STATE_GRAPH_TRAVERSAL';
+    const isTraversal = state === 'STATE_GRAPH_TRAVERSAL' || state === 'STATE_VECTOR_SEARCH';
 
-    // Interpolate morph target (0 for sphere, 1 for full overview network)
-    const targetProgress = isOverview ? 1.0 : 0.0;
+    // Maintain 5-cluster network layout (progress = 1.0) for both Overview AND Traversal
+    const targetProgress = isOverview || isTraversal ? 1.0 : 0.0;
     morphProgress.current = THREE.MathUtils.damp(
       morphProgress.current,
       targetProgress,
@@ -73,14 +90,17 @@ export function MorphingGraphUniverse({
 
     // Rotation control
     if (isOverview) {
-      groupRef.current.rotation.y += delta * 0.04;
-      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0.25, 2.0, delta);
+      // GALAXY_VIEW: Serene continuous cosmic rotation showcasing 3D tetrahedron depth
+      groupRef.current.rotation.y += delta * 0.07;
+      groupRef.current.rotation.x = Math.sin(Date.now() * 0.00012) * 0.04;
+      groupRef.current.rotation.z = Math.cos(Date.now() * 0.00010) * 0.02;
+    } else if (isTraversal) {
+      // TRAVERSAL: Stabilize facing active clusters for crisp AI query presentation
+      groupRef.current.rotation.y = THREE.MathUtils.damp(groupRef.current.rotation.y, 0, 3.0, delta);
+      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0, 3.0, delta);
+      groupRef.current.rotation.z = THREE.MathUtils.damp(groupRef.current.rotation.z, 0, 3.0, delta);
     } else if (isBenchmark) {
       groupRef.current.rotation.y += delta * 0.02;
-    } else if (isTraversal) {
-      // Focus on traversal view with subtle movement
-      groupRef.current.rotation.y = THREE.MathUtils.damp(groupRef.current.rotation.y, 0, 2.5, delta);
-      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0, 2.5, delta);
     } else {
       // IDLE: Serene continuous rotation
       groupRef.current.rotation.y += delta * IDLE_SPHERE_CONFIG.rotationSpeedY;
@@ -97,6 +117,7 @@ export function MorphingGraphUniverse({
 
     for (let i = 0; i < pointCount; i++) {
       const idx = i * 3;
+      const clusterIdx = i % 5;
       const phase = pointJitters[i];
 
       const sx = spherePositions[idx];
@@ -121,13 +142,13 @@ export function MorphingGraphUniverse({
       positions[idx + 1] = THREE.MathUtils.damp(positions[idx + 1], targetY, 5.0, delta);
       positions[idx + 2] = THREE.MathUtils.damp(positions[idx + 2], targetZ, 5.0, delta);
 
-      // Color mapping
+      // Color mapping & Cluster Isolation
       let targetR = 0;
       let targetG = 0;
       let targetB = 0;
 
       if (isOverview) {
-        const clusterColor = clusterPalette[i % 5];
+        const clusterColor = clusterPalette[clusterIdx];
         targetR = clusterColor.r;
         targetG = clusterColor.g;
         targetB = clusterColor.b;
@@ -136,9 +157,18 @@ export function MorphingGraphUniverse({
         targetG = 0.15;
         targetB = 0.25;
       } else if (isTraversal) {
-        targetR = 0.05;
-        targetG = 0.40;
-        targetB = 0.65;
+        // Complete Isolation: Delete/hide all non-participating clusters
+        if (activeClustersSet.has(clusterIdx)) {
+          const clusterColor = clusterPalette[clusterIdx];
+          targetR = clusterColor.r * 0.85;
+          targetG = clusterColor.g * 0.85;
+          targetB = clusterColor.b * 0.85;
+        } else {
+          // Uninvolved clusters are completely darkened and erased
+          targetR = 0.0;
+          targetG = 0.0;
+          targetB = 0.0;
+        }
       } else {
         const norm = (sDisplacement + 0.05) / 0.10;
         const clampedNorm = Math.max(0, Math.min(1, norm));
@@ -147,9 +177,9 @@ export function MorphingGraphUniverse({
         targetB = clampedNorm > 0.65 ? cyanPeak.b : cyanValley.b;
       }
 
-      colors[idx] = THREE.MathUtils.damp(colors[idx], targetR, 4.0, delta);
-      colors[idx + 1] = THREE.MathUtils.damp(colors[idx + 1], targetG, 4.0, delta);
-      colors[idx + 2] = THREE.MathUtils.damp(colors[idx + 2], targetB, 4.0, delta);
+      colors[idx] = THREE.MathUtils.damp(colors[idx], targetR, 5.0, delta);
+      colors[idx + 1] = THREE.MathUtils.damp(colors[idx + 1], targetG, 5.0, delta);
+      colors[idx + 2] = THREE.MathUtils.damp(colors[idx + 2], targetB, 5.0, delta);
     }
 
     posAttr.needsUpdate = true;
@@ -170,24 +200,29 @@ export function MorphingGraphUniverse({
           />
         </bufferGeometry>
         <pointsMaterial
-          size={state === 'STATE_GALAXY_VIEW' ? 0.032 : state === 'STATE_GRAPH_TRAVERSAL' ? 0.020 : IDLE_SPHERE_CONFIG.nodeSize}
+          size={state === 'STATE_GALAXY_VIEW' ? 0.036 : (state === 'STATE_GRAPH_TRAVERSAL' || state === 'STATE_VECTOR_SEARCH') ? 0.026 : IDLE_SPHERE_CONFIG.nodeSize}
           vertexColors
           transparent
-          opacity={0.92}
+          opacity={0.94}
           sizeAttenuation
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />
       </points>
 
-      {/* 3D Knowledge Graph Network: 5 Part Clusters & Real 299 Relationship Edges */}
-      {state === 'STATE_GALAXY_VIEW' && <FullGraphNetworkEdges />}
+      {/* 3D Knowledge Graph Network Background (Hides non-participating cluster lines and tags) */}
+      <FullGraphNetworkEdges
+        state={state}
+        activeClusterIndices={Array.from(activeClustersSet)}
+      />
 
-      {/* 3D Laser Traversal Beams when in STATE_GRAPH_TRAVERSAL */}
-      {state === 'STATE_GRAPH_TRAVERSAL' && <LaserTraversalEdges />}
+      {/* 3D Progressive Laser Traversal Beams when in STATE_GRAPH_TRAVERSAL */}
+      {state === 'STATE_GRAPH_TRAVERSAL' && <LaserTraversalEdges subgraphData={subgraphData} />}
 
       {/* 3D Floating Article Labels when in STATE_GRAPH_TRAVERSAL */}
-      {state === 'STATE_GRAPH_TRAVERSAL' && <Article3DLabels state={state} />}
+      {(state === 'STATE_GRAPH_TRAVERSAL' || state === 'STATE_VECTOR_SEARCH') && (
+        <Article3DLabels state={state} subgraphData={subgraphData} />
+      )}
     </group>
   );
 }

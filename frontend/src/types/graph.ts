@@ -28,3 +28,35 @@ export interface GraphSphereConfig {
   maxNeighbors: number;
   maxConnectionDistance: number;
 }
+
+// Live Subgraph Model from Backend
+export interface DynamicSubgraphNode {
+  id: string;
+  articleNumber: string;
+  title: string;
+  name?: string;
+  chapter?: string;
+  summary: string;
+  fullText?: string;
+  type?: 'origin_node' | 'traversal_node' | 'target_node';
+  color?: string;
+  position?: [number, number, number];
+}
+
+export interface DynamicSubgraphEdge {
+  id: string;
+  source: string;
+  target: string;
+  type: 'MUTATIS_MUTANDIS' | 'EXCEPTION_TO' | 'REFERENCES' | 'CONTAINS';
+  label?: string;
+  color?: string;
+  description?: string;
+}
+
+export interface DynamicSubgraphData {
+  targetArticle?: string;
+  nodes: DynamicSubgraphNode[];
+  edges: DynamicSubgraphEdge[];
+  node_count?: number;
+  edge_count?: number;
+}

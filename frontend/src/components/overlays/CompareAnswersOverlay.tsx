@@ -56,10 +56,10 @@ export function CompareAnswersOverlay({ onClose }: CompareAnswersOverlayProps) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <XCircle className="w-5 h-5 text-red-400" />
-                  <h3 className="font-bold text-sm text-red-200">{vectorRAG.title}</h3>
+                  <h3 className="font-bold text-sm text-red-200">단순 벡터 검색 (Vector RAG)</h3>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono border bg-red-500/10 text-red-300 border-red-500/30">
-                  신뢰도 {vectorRAG.confidence}
+                  신뢰도 {vectorRAG.confidence}%
                 </span>
               </div>
 
@@ -78,7 +78,7 @@ export function CompareAnswersOverlay({ onClose }: CompareAnswersOverlayProps) {
                   <span>주요 결함 및 누락 요인</span>
                 </span>
                 <ul className="space-y-1 text-[11px] text-slate-300 font-mono">
-                  {vectorRAG.missingPoints.map((pt, i) => (
+                  {(vectorRAG.pitfalls || vectorRAG.missingContext).map((pt: string, i: number) => (
                     <li key={i} className="flex items-start gap-1.5">
                       <span className="text-red-400 shrink-0">✕</span>
                       <span>{pt}</span>
@@ -89,7 +89,7 @@ export function CompareAnswersOverlay({ onClose }: CompareAnswersOverlayProps) {
             </div>
 
             <div className="mt-4 pt-3 border-t border-red-500/20 text-[10px] font-mono text-slate-400">
-              추출 단위: 단일 텍스트 청크 임베딩
+              추출 단위: 단일 텍스트 청크 임베딩 (Top-K 유사도)
             </div>
           </div>
 
@@ -99,10 +99,10 @@ export function CompareAnswersOverlay({ onClose }: CompareAnswersOverlayProps) {
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <CheckCircle2 className="w-5 h-5 text-emerald-400" />
-                  <h3 className="font-bold text-sm text-emerald-200">{graphRAG.title}</h3>
+                  <h3 className="font-bold text-sm text-emerald-200">지식 그래프 RAG (GraphRAG)</h3>
                 </div>
                 <span className="px-2 py-0.5 rounded text-[10px] font-mono border bg-emerald-500/10 text-emerald-300 border-emerald-500/30">
-                  신뢰도 {graphRAG.confidence}
+                  신뢰도 {graphRAG.confidence}%
                 </span>
               </div>
 
@@ -121,7 +121,7 @@ export function CompareAnswersOverlay({ onClose }: CompareAnswersOverlayProps) {
                   <span>GraphRAG 핵심 강점</span>
                 </span>
                 <ul className="space-y-1 text-[11px] text-slate-200 font-mono">
-                  {graphRAG.highlights.map((hl, i) => (
+                  {(graphRAG.highlights || graphRAG.logicalChain).map((hl: string, i: number) => (
                     <li key={i} className="flex items-start gap-1.5">
                       <span className="text-emerald-400 shrink-0">✓</span>
                       <span>{hl}</span>
