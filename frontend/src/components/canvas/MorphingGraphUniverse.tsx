@@ -6,6 +6,9 @@ import * as THREE from 'three';
 import { GraphSystemState } from '@/types/graph';
 import { LaserTraversalEdges } from './LaserTraversalEdges';
 import { Article3DLabels } from './Article3DLabels';
+import { FullGraphNetworkEdges } from './FullGraphNetworkEdges';
+import { getOrganicDisplacement, generateSpherePositions, generateOverviewPositions } from '@/lib/utils/math';
+import { IDLE_SPHERE_CONFIG, GALAXY_CONFIG } from '@/lib/constants/graphConfig';
 
 interface MorphingGraphUniverseProps {
   state: GraphSystemState;
@@ -13,77 +16,21 @@ interface MorphingGraphUniverseProps {
   subgraphData?: any;
 }
 
-// Low-frequency gentle micro-wave displacement that keeps the spherical silhouette stable
-function getOrganicDisplacement(x: number, y: number, z: number, time: number): number {
-  const wave1 = Math.sin(x * 1.6 + time * 0.5) * Math.cos(y * 1.6 + time * 0.4) * Math.sin(z * 1.6 + time * 0.35);
-  const gentleTwitch = Math.pow(Math.sin(time * 0.6), 6) * 0.035;
-  const wave2 = Math.sin(x * 3.2 - time * 0.8) * Math.cos(z * 3.2 + time * 0.7) * (0.02 + gentleTwitch);
-  const wave3 = Math.sin((x * 4.5 + y * 4.5 + z * 4.5) + time * 1.0) * 0.015;
-  return wave1 * 0.035 + wave2 + wave3;
-}
-
 export function MorphingGraphUniverse({
   state,
-  pointCount = 5000,
+  pointCount = IDLE_SPHERE_CONFIG.nodeCount,
 }: MorphingGraphUniverseProps) {
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
 
-  // Precompute 3D Target Coordinate Layouts (Sphere vs Galaxy)
-  const { spherePositions, galaxyPositions, pointJitters } = useMemo(() => {
-    const sPos = new Float32Array(pointCount * 3);
-    const gPos = new Float32Array(pointCount * 3);
-    const jitters = new Float32Array(pointCount);
-
-    const goldenRatio = (1 + Math.sqrt(5)) / 2;
-    const sphereRadius = 2.1;
-    const numArms = 5; // 5 Civil Act chapters (총칙, 물권, 채권, 친족, 상속)
-
-    for (let i = 0; i < pointCount; i++) {
-      // 1. Sphere Layout (Fibonacci sphere with organic scatter)
-      const y = 1 - (i / (pointCount - 1)) * 2;
-      const radiusAtY = Math.sqrt(Math.max(0, 1 - y * y));
-      const theta = 2 * Math.PI * i / goldenRatio;
-      const jAngle = Math.sin(i * 13.37) * 0.045 + Math.cos(i * 7.77) * 0.035;
-      const jY = Math.sin(i * 23.45) * 0.025;
-
-      const finalY = Math.max(-0.99, Math.min(0.99, y + jY));
-      const finalRadiusAtY = Math.sqrt(Math.max(0, 1 - finalY * finalY));
-      const finalTheta = theta + jAngle;
-
-      const sx = Math.cos(finalTheta) * finalRadiusAtY * sphereRadius;
-      const sy = finalY * sphereRadius;
-      const sz = Math.sin(finalTheta) * finalRadiusAtY * sphereRadius;
-
-      sPos[i * 3] = sx;
-      sPos[i * 3 + 1] = sy;
-      sPos[i * 3 + 2] = sz;
-
-      // 2. Galaxy Network Layout (Logarithmic 5-arm spiral disk)
-      const armIndex = i % numArms;
-      const armAngleOffset = (armIndex * 2 * Math.PI) / numArms;
-      const distanceFraction = Math.pow(Math.random(), 0.7);
-      const galaxyRadius = 0.5 + distanceFraction * 6.5;
-      const spiralAngle = armAngleOffset + distanceFraction * 4.5;
-      
-      const spreadX = (Math.random() - 0.5) * (0.3 + distanceFraction * 0.8);
-      const spreadY = (Math.random() - 0.5) * (0.2 + distanceFraction * 0.4);
-      const spreadZ = (Math.random() - 0.5) * (0.3 + distanceFraction * 0.8);
-
-      const gx = Math.cos(spiralAngle) * galaxyRadius + spreadX;
-      const gy = spreadY;
-      const gz = Math.sin(spiralAngle) * galaxyRadius + spreadZ;
-
-      gPos[i * 3] = gx;
-      gPos[i * 3 + 1] = gy;
-      gPos[i * 3 + 2] = gz;
-
-      jitters[i] = (i * 0.17) % (Math.PI * 2);
-    }
+  // Precompute 3D Target Coordinate Layouts (Single Sphere vs 5-Part Knowledge Graph Network)
+  const { spherePositions, overviewPositions, pointJitters } = useMemo(() => {
+    const { spherePositions: sPos, pointJitters: jitters } = generateSpherePositions(pointCount, IDLE_SPHERE_CONFIG.radius);
+    const oPos = generateOverviewPositions(pointCount);
 
     return {
       spherePositions: sPos,
-      galaxyPositions: gPos,
+      overviewPositions: oPos,
       pointJitters: jitters,
     };
   }, [pointCount]);
@@ -97,16 +44,10 @@ export function MorphingGraphUniverse({
   }, [spherePositions, pointCount]);
 
   // Color constants
-  const cyanPeak = useMemo(() => new THREE.Color('#38bdf8'), []);
+  const cyanPeak = useMemo(() => new THREE.Color(IDLE_SPHERE_CONFIG.coreColor), []);
   const cyanValley = useMemo(() => new THREE.Color('#0284c7'), []);
-  const galaxyArmPalette = useMemo(
-    () => [
-      new THREE.Color('#38bdf8'), // 총칙: Cyan
-      new THREE.Color('#818cf8'), // 물권: Indigo
-      new THREE.Color('#a855f7'), // 채권: Purple
-      new THREE.Color('#34d399'), // 친족: Emerald
-      new THREE.Color('#fbbf24'), // 상속: Amber
-    ],
+  const clusterPalette = useMemo(
+    () => GALAXY_CONFIG.armColors.map((hex) => new THREE.Color(hex)),
     []
   );
 
@@ -116,24 +57,24 @@ export function MorphingGraphUniverse({
     if (!pointsRef.current || !groupRef.current) return;
 
     const time = Date.now() * 0.0008;
-    const isGalaxy = state === 'STATE_GALAXY_VIEW';
+    const isOverview = state === 'STATE_GALAXY_VIEW';
     const isBenchmark = state === 'STATE_BENCHMARK_RADAR';
     const isTraversal = state === 'STATE_GRAPH_TRAVERSAL';
 
-    // Interpolate morph target (0 for sphere, 1 for galaxy)
-    const targetProgress = isGalaxy ? 1.0 : 0.0;
+    // Interpolate morph target (0 for sphere, 1 for full overview network)
+    const targetProgress = isOverview ? 1.0 : 0.0;
     morphProgress.current = THREE.MathUtils.damp(
       morphProgress.current,
       targetProgress,
-      4.0,
+      3.5,
       delta
     );
     const progress = morphProgress.current;
 
     // Rotation control
-    if (isGalaxy) {
-      groupRef.current.rotation.y += delta * 0.05;
-      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0.45, 2.0, delta);
+    if (isOverview) {
+      groupRef.current.rotation.y += delta * 0.04;
+      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0.25, 2.0, delta);
     } else if (isBenchmark) {
       groupRef.current.rotation.y += delta * 0.02;
     } else if (isTraversal) {
@@ -142,8 +83,8 @@ export function MorphingGraphUniverse({
       groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0, 2.5, delta);
     } else {
       // IDLE: Serene continuous rotation
-      groupRef.current.rotation.y += delta * 0.07;
-      groupRef.current.rotation.x = Math.sin(Date.now() * 0.00012) * 0.04;
+      groupRef.current.rotation.y += delta * IDLE_SPHERE_CONFIG.rotationSpeedY;
+      groupRef.current.rotation.x = Math.sin(Date.now() * 0.00012) * IDLE_SPHERE_CONFIG.rotationSpeedX;
       groupRef.current.rotation.z = Math.cos(Date.now() * 0.00010) * 0.03;
     }
 
@@ -168,13 +109,13 @@ export function MorphingGraphUniverse({
       const targetSY = sy * curSphereRadiusMult;
       const targetSZ = sz * curSphereRadiusMult;
 
-      const targetGX = galaxyPositions[idx];
-      const targetGY = galaxyPositions[idx + 1];
-      const targetGZ = galaxyPositions[idx + 2];
+      const targetOX = overviewPositions[idx];
+      const targetOY = overviewPositions[idx + 1];
+      const targetOZ = overviewPositions[idx + 2];
 
-      const targetX = THREE.MathUtils.lerp(targetSX, targetGX, progress);
-      const targetY = THREE.MathUtils.lerp(targetSY, targetGY, progress);
-      const targetZ = THREE.MathUtils.lerp(targetSZ, targetGZ, progress);
+      const targetX = THREE.MathUtils.lerp(targetSX, targetOX, progress);
+      const targetY = THREE.MathUtils.lerp(targetSY, targetOY, progress);
+      const targetZ = THREE.MathUtils.lerp(targetSZ, targetOZ, progress);
 
       positions[idx] = THREE.MathUtils.damp(positions[idx], targetX, 5.0, delta);
       positions[idx + 1] = THREE.MathUtils.damp(positions[idx + 1], targetY, 5.0, delta);
@@ -185,17 +126,16 @@ export function MorphingGraphUniverse({
       let targetG = 0;
       let targetB = 0;
 
-      if (isGalaxy) {
-        const armColor = galaxyArmPalette[i % 5];
-        targetR = armColor.r;
-        targetG = armColor.g;
-        targetB = armColor.b;
+      if (isOverview) {
+        const clusterColor = clusterPalette[i % 5];
+        targetR = clusterColor.r;
+        targetG = clusterColor.g;
+        targetB = clusterColor.b;
       } else if (isBenchmark) {
         targetR = 0.05;
         targetG = 0.15;
         targetB = 0.25;
       } else if (isTraversal) {
-        // Starfield background during traversal
         targetR = 0.05;
         targetG = 0.40;
         targetB = 0.65;
@@ -230,7 +170,7 @@ export function MorphingGraphUniverse({
           />
         </bufferGeometry>
         <pointsMaterial
-          size={state === 'STATE_GALAXY_VIEW' ? 0.038 : state === 'STATE_GRAPH_TRAVERSAL' ? 0.020 : 0.026}
+          size={state === 'STATE_GALAXY_VIEW' ? 0.032 : state === 'STATE_GRAPH_TRAVERSAL' ? 0.020 : IDLE_SPHERE_CONFIG.nodeSize}
           vertexColors
           transparent
           opacity={0.92}
@@ -239,6 +179,9 @@ export function MorphingGraphUniverse({
           depthWrite={false}
         />
       </points>
+
+      {/* 3D Knowledge Graph Network: 5 Part Clusters & Real 299 Relationship Edges */}
+      {state === 'STATE_GALAXY_VIEW' && <FullGraphNetworkEdges />}
 
       {/* 3D Laser Traversal Beams when in STATE_GRAPH_TRAVERSAL */}
       {state === 'STATE_GRAPH_TRAVERSAL' && <LaserTraversalEdges />}

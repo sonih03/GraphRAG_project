@@ -17,7 +17,7 @@
 | 상태 (State) | 음성 트리거 / 조건 | 3D Canvas 시각적 변환 및 인터랙션 |
 |---|---|---|
 | `STATE_IDLE` | 기본 대기 상태 | 5,000개 초미세 노드가 구면 표면에 자연스럽게 흩뿌려져 은은한 하모닉 파동과 함께 안정적으로 자전 |
-| `STATE_GALAXY_VIEW` | "전체 데이터베이스 구조 보여줘" | 카메라 Zoom-out, 구체 노드들이 3D 은하 네트워크(Galaxy Network)로 부드럽게 형태 변형(Morphing) |
+| `STATE_GALAXY_VIEW`<br/>(`STATE_GRAPH_OVERVIEW`) | "전체 데이터베이스 구조 보여줘" | 카메라 Zoom-out, 실제 데이터베이스의 그래프 구조(노드들과 노드 간을 잇는 관계 엣지들이 서로 그물망처럼 얽힌 3D 지식 그래프 네트워크)를 웅장하게 렌더링 |
 | `STATE_VECTOR_SEARCH` | "기존 방식으로 제13조 검색해줘" | 자전 중단, 엣지 소멸. 1~2개 고립 노드만 빨간색으로 점멸. 한계점 경고 오버레이 팝업 |
 | `STATE_GRAPH_TRAVERSAL` | "GraphRAG로 제13조 연관 구조 보여줘" | 제13조 노드로 급속 줌인, 3D 모핑. 준용(녹색), 예외(적색) 레이저 엣지가 제14·15·16조로 뻗어나감 |
 | `STATE_COMPARE_ANSWERS` | "두 방식의 실제 자연어 답변 비교해줘" | 딤드(Dimmed) 3D 배경 위 Glassmorphism Split Card 오버레이 (VectorRAG vs GraphRAG 답변 비교) |
@@ -70,6 +70,11 @@
 - `app/api/v1/endpoints/health.py`: 헬스체크 엔드포인트
 - `app/api/v1/endpoints/graph.py`: 그래프 데이터 및 쿼리 엔드포인트
 - `app/api/v1/router.py`: API v1 라우터 통합
+- `app/pipeline/civil_act_parser.py`: 조문 가지번호 방어, 유니코드 정규화, 계층 분할 및 Clause 서브청킹 파서
+- `app/pipeline/hybrid_extractor.py`: 준용(MUTATIS_MUTANDIS), 예외(EXCEPTION_TO), 참조(REFERENCES) 관계 추출기 (고스트 노드 방어)
+- `app/pipeline/neo4j_loader.py`: UNIQUE CONSTRAINT DDL 우선 실행 및 UNWIND 500건 단위 벌크 MERGE 로더
+- `app/pipeline/ingest.py`: 원클릭 전체 민법 적재 CLI 실행 스크립트
+- `civil_law.txt`: 대한민국 민법 원문 데이터 (375KB)
 - `.env.example`: 환경 변수 템플릿
 
 ---
@@ -82,11 +87,11 @@
 - [x] **Step 4**: 프로젝트 루트 `package.json` 추가로 루트 터미널에서 `npm run dev` 및 `npm run build` 직접 실행 지원
 - [x] **Step 5**: 브라우저 서브에이전트(CDP) 스크린샷 자가 검증 (초미세 입자 60fps 부드러운 렌더링 확인)
 - [x] **Step 6**: 핵심 상태 3종(`STATE_GALAXY_VIEW`, `STATE_GRAPH_TRAVERSAL`, `STATE_BENCHMARK_RADAR`) 및 `STATE_IDLE` 구체 간 부드러운 60fps 모핑 전환 안정화
-- [x] **Step 7**: FastAPI 서버(포트 8000) 구동 및 Neo4j 실데이터(301개 노드, EXCEPT_IF/MUTATIS_MUTANDIS 엣지) 연동 `POST /api/query` 엔드포인트 검증 완료
+- [x] **Step 7**: FastAPI 서버(포트 8000) 구동 및 Neo4j 실데이터 연동 `POST /api/query` 엔드포인트 검증 완료
 - [x] **Step 8**: 프론트엔드-백엔드 실시간 API 연동 및 제13조 3D Graph Traversal 레이저 빔 연쇄 발사 브라우저(CDP) 자가 검증 완료
-- [ ] **Step 9**: PDF 법률 데이터 추출 & Gemini API Structured Output -> Neo4j MERGE 적재 파이썬 파이프라인 확장
-- [ ] **Step 10**: Groq Whisper STT 법률 용어 프롬프트 음성 인식 연동 & WebSocket/SSE 실시간 상태 트리거
-- [ ] **Step 11**: 전체 프론트엔드/백엔드 유닛 테스트 작성 및 100% 통과 검증
+- [x] **Step 10**: 프론트엔드 Scene 2(`STATE_GRAPH_OVERVIEW` / "전체 DB 지식 그래프")에 적재된 전체 민법 지식 그래프 네트워크(5개 편 클러스터, 1,118개 조문 노드, 299개 준용/예외 엣지) 3D 실시간 렌더링 연동 및 브라우저(CDP) 시각 검증 완료
+- [ ] **Step 11**: Groq Whisper STT 법률 용어 프롬프트 음성 인식 연동 & WebSocket/SSE 실시간 상태 트리거
+- [ ] **Step 12**: 전체 프론트엔드/백엔드 유닛 테스트 작성 및 100% 통과 검증
 
 
 

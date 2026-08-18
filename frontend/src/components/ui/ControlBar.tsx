@@ -24,7 +24,7 @@ export function ControlBar({ currentState, onSetState, onQueryResult }: ControlB
       queryText: '',
     },
     {
-      label: '전체 은하 구조',
+      label: '전체 DB 지식 그래프',
       state: 'STATE_GALAXY_VIEW',
       icon: Globe,
       queryText: '전체 데이터베이스 구조 보여줘',
@@ -155,7 +155,7 @@ export function ControlBar({ currentState, onSetState, onQueryResult }: ControlB
           <div className="flex items-center gap-4">
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-cyan-400 shadow-[0_0_8px_#38bdf8]" />
-              <span>Neo4j 301 Nodes • Live Backend</span>
+              <span>Neo4j 1,118 Articles & 530 Relations • Live Backend</span>
             </span>
             <span className="flex items-center gap-1.5">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />

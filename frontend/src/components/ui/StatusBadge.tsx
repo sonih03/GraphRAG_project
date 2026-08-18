@@ -17,8 +17,8 @@ export function StatusBadge({ state, className }: StatusBadgeProps) {
       icon: Radio,
     },
     STATE_GALAXY_VIEW: {
-      label: 'GALAXY_VIEW',
-      description: 'Full Civil Act 3D Galaxy',
+      label: 'GRAPH_OVERVIEW',
+      description: '1,118 Articles & 530 Relations Network',
       badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
       dotColor: 'bg-indigo-400 animate-pulse',
       icon: Globe,

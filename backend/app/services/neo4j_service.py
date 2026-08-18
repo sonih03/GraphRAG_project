@@ -2,7 +2,6 @@ from neo4j import GraphDatabase, Driver
 from typing import Optional, List, Dict, Any
 from app.core.config import settings
 from app.core.logging import logger
-from app.models.graph import NodeModel, EdgeModel, GraphDataResponse
 
 class Neo4jService:
     _driver: Optional[Driver] = None
@@ -40,39 +39,46 @@ class Neo4jService:
             return False
 
     @classmethod
-    def get_article_subgraph(cls, target_id: str = "art_13") -> Dict[str, Any]:
+    def get_article_subgraph(cls, target_query: Any = "13") -> Dict[str, Any]:
         """
-        Retrieves the multi-hop subgraph for target article (e.g. art_13 -> 14, 15, 16)
-        with relationships EXCEPT_IF and MUTATIS_MUTANDIS.
+        Retrieves the multi-hop subgraph for target article (e.g. Art. 13 -> 14, 15, 16)
+        with relationships MUTATIS_MUTANDIS, EXCEPTION_TO, and REFERENCES.
         """
         driver = cls.get_driver()
         nodes_dict: Dict[str, Dict[str, Any]] = {}
         edges_list: List[Dict[str, Any]] = []
 
-        query = """
-        MATCH (center:LawArticle)
-        WHERE center.id = $target_id OR center.id CONTAINS $target_id
-        OPTIONAL MATCH path = (center)-[r:EXCEPT_IF|MUTATIS_MUTANDIS*1..2]-(neighbor:LawArticle)
+        query_str = str(target_query).replace("제", "").replace("조", "").strip()
+
+        cypher = """
+        MATCH (center:Article)
+        WHERE center.id = $raw_query 
+           OR center.id = 'KR-CIVIL-ART-' + $query_str
+           OR center.number_str = $query_str
+           OR center.number_base = toInteger($query_str)
+        OPTIONAL MATCH path = (center)-[r:MUTATIS_MUTANDIS|EXCEPTION_TO|REFERENCES*1..2]-(neighbor:Article)
         RETURN center, relationships(path) AS rels, nodes(path) AS path_nodes
         """
 
         with driver.session() as session:
-            result = session.run(query, target_id=target_id)
+            result = session.run(cypher, raw_query=str(target_query), query_str=query_str)
             records = list(result)
 
             for record in records:
                 center = record.get("center")
                 if center:
                     props = dict(center)
-                    nodes_dict[props.get("id", target_id)] = {
-                        "id": props.get("id", target_id),
+                    cid = props.get("id", "KR-CIVIL-ART-13")
+                    nodes_dict[cid] = {
+                        "id": cid,
                         "label": f"{props.get('title', '')} {props.get('name', '')}".strip(),
                         "type": "origin_node",
-                        "number": props.get("number"),
+                        "number": props.get("number_base", 13),
                         "title": props.get("title", ""),
                         "name": props.get("name", ""),
-                        "content": props.get("content", ""),
-                        "principle": props.get("principle", ""),
+                        "fullText": props.get("fullText", ""),
+                        "summary": props.get("summary", ""),
+                        "contextPath": props.get("contextPath", ""),
                         "properties": props
                     }
 
@@ -85,34 +91,42 @@ class Neo4jService:
                             "id": nid,
                             "label": f"{props.get('title', '')} {props.get('name', '')}".strip(),
                             "type": "traversal_node",
-                            "number": props.get("number"),
+                            "number": props.get("number_base", 0),
                             "title": props.get("title", ""),
                             "name": props.get("name", ""),
-                            "content": props.get("content", ""),
-                            "principle": props.get("principle", ""),
+                            "fullText": props.get("fullText", ""),
+                            "summary": props.get("summary", ""),
+                            "contextPath": props.get("contextPath", ""),
                             "properties": props
                         }
 
                 rels = record.get("rels") or []
                 for r in rels:
+                    edge_id = f"{r.start_node['id']}_{r.type}_{r.end_node['id']}"
+                    color = "#10b981" if r.type == "MUTATIS_MUTANDIS" else "#ef4444" if r.type == "EXCEPTION_TO" else "#38bdf8"
+                    label = (
+                        "준용 규정 (Mutatis Mutandis)" if r.type == "MUTATIS_MUTANDIS" 
+                        else "예외 규정 (Exception To)" if r.type == "EXCEPTION_TO" 
+                        else "참조 규정 (References)"
+                    )
                     edge_item = {
-                        "id": f"{r.start_node['id']}_{r.type}_{r.end_node['id']}",
+                        "id": edge_id,
                         "source": r.start_node["id"],
                         "target": r.end_node["id"],
                         "type": r.type,
                         "relation": r.type,
-                        "color": "#10b981" if r.type == "MUTATIS_MUTANDIS" else "#ef4444",
-                        "label": "준용 규정 (Mutatis Mutandis)" if r.type == "MUTATIS_MUTANDIS" else "예외 규정 (Except If)"
+                        "color": color,
+                        "label": label,
+                        "description": r.get("description", "")
                     }
                     if not any(e["id"] == edge_item["id"] for e in edges_list):
                         edges_list.append(edge_item)
 
-        # Fallback if no paths were found
         if not nodes_dict:
             return cls._get_fallback_art13_subgraph()
 
         return {
-            "target_id": target_id,
+            "target_id": str(target_query),
             "nodes": list(nodes_dict.values()),
             "edges": edges_list,
             "node_count": len(nodes_dict),
@@ -120,39 +134,64 @@ class Neo4jService:
         }
 
     @classmethod
-    def get_all_overview(cls, limit: int = 300) -> Dict[str, Any]:
-        """Retrieves overview nodes from Neo4j for 3D background visualization"""
+    def get_all_overview(cls, limit: int = 1200) -> Dict[str, Any]:
+        """Retrieves overview nodes and relationships from Neo4j for full graph network visualization"""
         driver = cls.get_driver()
-        query = "MATCH (n:LawArticle) RETURN n LIMIT $limit"
         nodes = []
+        edges = []
         with driver.session() as session:
-            result = session.run(query, limit=limit)
+            # Nodes
+            result = session.run("""
+                MATCH (a:Article)
+                RETURN a.id AS id, a.title AS title, a.name AS name, a.number_base AS number, a.contextPath AS contextPath
+                LIMIT $limit
+            """, limit=limit)
             for rec in result:
-                props = dict(rec["n"])
                 nodes.append({
-                    "id": props.get("id"),
-                    "title": props.get("title", ""),
-                    "name": props.get("name", ""),
-                    "number": props.get("number", 0),
-                    "principle": props.get("principle", "")
+                    "id": rec["id"],
+                    "title": rec["title"],
+                    "name": rec["name"],
+                    "number": rec["number"],
+                    "contextPath": rec["contextPath"]
                 })
 
-        return {"nodes": nodes, "count": len(nodes)}
+            # Edges: Include MUTATIS_MUTANDIS, EXCEPTION_TO, and REFERENCES
+            edge_result = session.run("""
+                MATCH (src:Article)-[r:MUTATIS_MUTANDIS|EXCEPTION_TO|REFERENCES]->(tgt:Article)
+                RETURN src.id AS source, tgt.id AS target, type(r) AS type
+                LIMIT 1000
+            """)
+            for er in edge_result:
+                r_type = er["type"]
+                color = "#10b981" if r_type == "MUTATIS_MUTANDIS" else "#ef4444" if r_type == "EXCEPTION_TO" else "#38bdf8"
+                edges.append({
+                    "source": er["source"],
+                    "target": er["target"],
+                    "type": r_type,
+                    "color": color
+                })
+
+        return {
+            "nodes": nodes,
+            "edges": edges,
+            "node_count": len(nodes),
+            "edge_count": len(edges)
+        }
 
     @classmethod
     def _get_fallback_art13_subgraph(cls) -> Dict[str, Any]:
         return {
-            "target_id": "art_13",
+            "target_id": "KR-CIVIL-ART-13",
             "nodes": [
-                {"id": "art_13", "title": "제13조", "name": "피한정후견인의 행위와 동의", "type": "origin_node"},
-                {"id": "art_14", "title": "제14조", "name": "한정후견종료의 심판", "type": "traversal_node"},
-                {"id": "art_15", "title": "제15조", "name": "제한능력자의 상대방의 확답을 촉구할 권리", "type": "traversal_node"},
-                {"id": "art_16", "title": "제16조", "name": "피특정후견인의 행위와 보호", "type": "traversal_node"}
+                {"id": "KR-CIVIL-ART-13", "title": "제13조", "name": "피한정후견인의 행위와 동의", "type": "origin_node"},
+                {"id": "KR-CIVIL-ART-14", "title": "제14조", "name": "한정후견종료의 심판", "type": "traversal_node"},
+                {"id": "KR-CIVIL-ART-15", "title": "제15조", "name": "제한능력자의 상대방의 확답을 촉구할 권리", "type": "traversal_node"},
+                {"id": "KR-CIVIL-ART-16", "title": "제16조", "name": "피특정후견인의 행위와 보호", "type": "traversal_node"}
             ],
             "edges": [
-                {"id": "art_13_EXCEPT_IF_art_14", "source": "art_13", "target": "art_14", "type": "EXCEPT_IF", "relation": "EXCEPT_IF", "color": "#ef4444"},
-                {"id": "art_13_MUTATIS_MUTANDIS_art_15", "source": "art_13", "target": "art_15", "type": "MUTATIS_MUTANDIS", "relation": "MUTATIS_MUTANDIS", "color": "#10b981"},
-                {"id": "art_15_MUTATIS_MUTANDIS_art_16", "source": "art_15", "target": "art_16", "type": "MUTATIS_MUTANDIS", "relation": "MUTATIS_MUTANDIS", "color": "#10b981"}
+                {"id": "MUTATIS_13_14", "source": "KR-CIVIL-ART-13", "target": "KR-CIVIL-ART-14", "type": "MUTATIS_MUTANDIS", "color": "#10b981", "label": "준용 규정"},
+                {"id": "MUTATIS_13_15", "source": "KR-CIVIL-ART-13", "target": "KR-CIVIL-ART-15", "type": "MUTATIS_MUTANDIS", "color": "#10b981", "label": "준용 규정"},
+                {"id": "EXCEPT_13_16", "source": "KR-CIVIL-ART-13", "target": "KR-CIVIL-ART-16", "type": "EXCEPTION_TO", "color": "#ef4444", "label": "예외 규정"}
             ],
             "node_count": 4,
             "edge_count": 3

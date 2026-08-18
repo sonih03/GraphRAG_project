@@ -26,8 +26,8 @@ export function CameraController({ state }: CameraControllerProps) {
 
     switch (state) {
       case 'STATE_GALAXY_VIEW':
-        // Zoom-out for expansive galaxy view
-        targetCamPos.current.set(0, 3.5, 12.0);
+        // Zoom-out for expansive full 5-cluster overview
+        targetCamPos.current.set(0, 4.2, 19.5);
         targetLookAt.current.set(0, 0, 0);
         break;
       case 'STATE_GRAPH_TRAVERSAL':
@@ -43,7 +43,8 @@ export function CameraController({ state }: CameraControllerProps) {
       case 'STATE_COMPARE_ANSWERS':
       case 'STATE_BENCHMARK_RADAR':
       default:
-        targetCamPos.current.set(0, 0, 7.5);
+        // Elegant, comfortable scale for IDLE sphere with breathing room
+        targetCamPos.current.set(0, 0, 10.5);
         targetLookAt.current.set(0, 0, 0);
         break;
     }
