@@ -10,6 +10,8 @@ interface OverlayManagerProps {
   onSetState: (nextState: GraphSystemState) => void;
   subgraphData?: DynamicSubgraphData | null;
   legalAnswer?: string | null;
+  /** Called when the AI panel is explicitly closed by the user */
+  onPanelClose?: () => void;
 }
 
 export function OverlayManager({
@@ -17,7 +19,16 @@ export function OverlayManager({
   onSetState,
   subgraphData = null,
   legalAnswer = null,
+  onPanelClose,
 }: OverlayManagerProps) {
+  const handlePanelClose = () => {
+    if (onPanelClose) {
+      onPanelClose();
+    } else {
+      onSetState('STATE_IDLE');
+    }
+  };
+
   return (
     <AnimatePresence mode="wait">
       {/* 1. Benchmark Radar Modal */}
@@ -34,7 +45,7 @@ export function OverlayManager({
           key="graphrag-answer-panel"
           subgraphData={subgraphData}
           legalAnswer={legalAnswer}
-          onClose={() => onSetState('STATE_IDLE')}
+          onClose={handlePanelClose}
         />
       )}
     </AnimatePresence>

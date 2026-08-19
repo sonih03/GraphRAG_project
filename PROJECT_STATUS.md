@@ -3,6 +3,12 @@
 > **[문서 목적]**  
 > 본 문서는 LLM 및 개발자가 매 대화/명령마다 프로젝트의 전체 구현 상태, 함수/컴포넌트 인덱스, 3D 좌표계, 작업 이력 및 로드맵을 즉시 파악하여 **토큰 낭비를 방지하고, 중복 함수 구현을 차단하며, 전체 컨텍스트를 100% 보존**하기 위한 단일 진실 공급원(Single Source of Truth)입니다.
 
+## ⚠️ Token & Tool Constraints
+
+- **STRICT NO BROWSER AGENT**: Never trigger automated browser navigation, DOM parsing, mouse clicks, or visual rendering checks (e.g., `Exploring browser`, `http://localhost:*`).
+- **NO VISUAL VERIFICATION LOOPS**: Visual layout, graph centering, CSS styles, and UI functionality must be verified by the user, not by the agent.
+- **CONCISE CONTEXT**: Focus purely on analyzing and modifying target code files (React components, API endpoints, logic scripts) to minimize token consumption and avoid quota exhaustion.
+
 ---
 
 ## 🏛️ 1. 시스템 핵심 아키텍처 & 포트 맵
@@ -101,6 +107,8 @@
 - [x] **2026-08-18 (Phase 11)**: 정사면체 반경 최적화($R=3.1$) & 카메라 줌인($Z=11.5$)으로 화면 빈 공간 제거 완료.
 - [x] **2026-08-18 (Phase 12)**: 3D 라벨 카드 초미니 마이크로 뱃지화 완료.
 - [x] **2026-08-18 (Phase 13)**: **3D 라벨 알약 뱃지 크기를 완벽한 스위트 스팟(`transform: scale(0.95)`, `distanceFactor=8`)으로 정밀 튜닝하여 선명한 가독성과 미려한 그래프 비가림 시각화 동시 달성 완료**.
+- [x] **2026-08-19 (Phase 14)**: Gemini-3.7-flash LLM 모델 실시간 RAG 파이프라인 연동 및 Neo4j 온톨로지 2-Hop Dynamic subgraph 컨텍스트 매핑 완료.
+- [x] **2026-08-19 (Phase 15)**: 3D 조문 뱃지 기하학적 1.85-unit 가로축 분산 배치로 라벨 겹침(Collision) 제거 및 AI Answer 패널과의 가림(Occlusion) 해결 완료.
 
 ---
 

@@ -2,7 +2,7 @@ import { GraphSphereConfig } from '@/types/graph';
 
 export const IDLE_SPHERE_CONFIG: GraphSphereConfig = {
   nodeCount: 5000,
-  radius: 2.1,
+  radius: 1.4,
   nodeSize: 0.026,
   coreColor: '#38bdf8',
   glowColor: '#0ea5e9',

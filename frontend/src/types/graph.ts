@@ -1,6 +1,7 @@
 export type GraphSystemState =
   | 'STATE_IDLE'
   | 'STATE_GALAXY_VIEW'
+  | 'STATE_QUERYING'
   | 'STATE_VECTOR_SEARCH'
   | 'STATE_GRAPH_TRAVERSAL'
   | 'STATE_COMPARE_ANSWERS'

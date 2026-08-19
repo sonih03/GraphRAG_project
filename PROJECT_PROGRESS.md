@@ -4,6 +4,11 @@
 > 본 프로젝트의 유일무이한 궁극적 목표는 **"GraphRAG 15분 강의 라이브 시연"**입니다.  
 > 본 웹사이트는 일반적인 웹 앱이 아닌, **"마우스 조작 없이 오직 RAG(자연어 질의 및 음성)만을 사용하여 화면과 3D 캔버스를 완벽하게 제어하는 15분 강의 시연 자료"**로 개발됩니다.
 
+## ⚠️ Token & Tool Constraints
+
+- **STRICT NO BROWSER AGENT**: Never trigger automated browser navigation, DOM parsing, mouse clicks, or visual rendering checks (e.g., `Exploring browser`, `http://localhost:*`).
+- **NO VISUAL VERIFICATION LOOPS**: Visual layout, graph centering, CSS styles, and UI functionality must be verified by the user, not by the agent.
+- **CONCISE CONTEXT**: Focus purely on analyzing and modifying target code files (React components, API endpoints, logic scripts) to minimize token consumption and avoid quota exhaustion.
 ---
 
 ## ⏱️ 15분 강의 시연 타임라인 & RAG 자연어 제어 시나리오

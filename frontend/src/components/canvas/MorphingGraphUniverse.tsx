@@ -5,7 +5,6 @@ import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
 import { LaserTraversalEdges } from './LaserTraversalEdges';
-import { Article3DLabels } from './Article3DLabels';
 import { FullGraphNetworkEdges } from './FullGraphNetworkEdges';
 import {
   getOrganicDisplacement,
@@ -19,15 +18,20 @@ interface MorphingGraphUniverseProps {
   state: GraphSystemState;
   pointCount?: number;
   subgraphData?: DynamicSubgraphData | null;
+  panelOpen?: boolean;
+  currentQuery?: string | null;
 }
 
 export function MorphingGraphUniverse({
   state,
   pointCount = IDLE_SPHERE_CONFIG.nodeCount,
   subgraphData,
+  panelOpen = false,
+  currentQuery,
 }: MorphingGraphUniverseProps) {
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
+  const queryStartTime = useRef<number | null>(null);
 
   // Identify active participating clusters in current query
   const activeClustersSet = useMemo(() => {
@@ -70,16 +74,27 @@ export function MorphingGraphUniverse({
 
   const morphProgress = useRef(0);
 
-  useFrame((_, delta) => {
+  useFrame((rootState, delta) => {
     if (!pointsRef.current || !groupRef.current) return;
+
+    const clock = rootState.clock;
+    const isQuerying = state === 'STATE_QUERYING';
+
+    if (isQuerying) {
+      if (queryStartTime.current === null) {
+        queryStartTime.current = clock.getElapsedTime();
+      }
+    } else {
+      queryStartTime.current = null;
+    }
 
     const time = Date.now() * 0.0008;
     const isOverview = state === 'STATE_GALAXY_VIEW';
     const isBenchmark = state === 'STATE_BENCHMARK_RADAR';
     const isTraversal = state === 'STATE_GRAPH_TRAVERSAL' || state === 'STATE_VECTOR_SEARCH';
 
-    // Maintain 5-cluster network layout (progress = 1.0) for both Overview AND Traversal
-    const targetProgress = isOverview || isTraversal ? 1.0 : 0.0;
+    // Maintain 5-cluster network layout (progress = 1.0) for Overview, Traversal, and Querying
+    const targetProgress = isOverview || isTraversal || isQuerying ? 1.0 : 0.0;
     morphProgress.current = THREE.MathUtils.damp(
       morphProgress.current,
       targetProgress,
@@ -99,6 +114,11 @@ export function MorphingGraphUniverse({
       groupRef.current.rotation.y = THREE.MathUtils.damp(groupRef.current.rotation.y, 0, 3.0, delta);
       groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0, 3.0, delta);
       groupRef.current.rotation.z = THREE.MathUtils.damp(groupRef.current.rotation.z, 0, 3.0, delta);
+    } else if (isQuerying) {
+      // QUERYING: Rotate continuous during loading to keep the system active
+      groupRef.current.rotation.y += delta * 0.05;
+      groupRef.current.rotation.x = Math.sin(Date.now() * 0.00012) * 0.03;
+      groupRef.current.rotation.z = Math.cos(Date.now() * 0.00010) * 0.015;
     } else if (isBenchmark) {
       groupRef.current.rotation.y += delta * 0.02;
     } else {
@@ -147,7 +167,7 @@ export function MorphingGraphUniverse({
       let targetG = 0;
       let targetB = 0;
 
-      if (isOverview) {
+      if (isOverview || isQuerying) {
         const clusterColor = clusterPalette[clusterIdx];
         targetR = clusterColor.r;
         targetG = clusterColor.g;
@@ -157,17 +177,18 @@ export function MorphingGraphUniverse({
         targetG = 0.15;
         targetB = 0.25;
       } else if (isTraversal) {
-        // Complete Isolation: Delete/hide all non-participating clusters
         if (activeClustersSet.has(clusterIdx)) {
+          // Active cluster: vivid highlight so it clearly stands out
           const clusterColor = clusterPalette[clusterIdx];
-          targetR = clusterColor.r * 0.85;
-          targetG = clusterColor.g * 0.85;
-          targetB = clusterColor.b * 0.85;
+          targetR = clusterColor.r * 0.9;
+          targetG = clusterColor.g * 0.9;
+          targetB = clusterColor.b * 0.9;
         } else {
-          // Uninvolved clusters are completely darkened and erased
-          targetR = 0.0;
-          targetG = 0.0;
-          targetB = 0.0;
+          // Inactive cluster: very dim ghost — lets users see full DB context without competing with active
+          const clusterColor = clusterPalette[clusterIdx];
+          targetR = clusterColor.r * 0.10;
+          targetG = clusterColor.g * 0.10;
+          targetB = clusterColor.b * 0.10;
         }
       } else {
         const norm = (sDisplacement + 0.05) / 0.10;
@@ -210,19 +231,16 @@ export function MorphingGraphUniverse({
         />
       </points>
 
-      {/* 3D Knowledge Graph Network Background (Hides non-participating cluster lines and tags) */}
+      {/* 3D Knowledge Graph Network: dim background in traversal, vivid active edges highlighted */}
       <FullGraphNetworkEdges
         state={state}
         activeClusterIndices={Array.from(activeClustersSet)}
+        subgraphData={subgraphData}
+        currentQuery={currentQuery}
       />
 
       {/* 3D Progressive Laser Traversal Beams when in STATE_GRAPH_TRAVERSAL */}
       {state === 'STATE_GRAPH_TRAVERSAL' && <LaserTraversalEdges subgraphData={subgraphData} />}
-
-      {/* 3D Floating Article Labels when in STATE_GRAPH_TRAVERSAL */}
-      {(state === 'STATE_GRAPH_TRAVERSAL' || state === 'STATE_VECTOR_SEARCH') && (
-        <Article3DLabels state={state} subgraphData={subgraphData} />
-      )}
     </group>
   );
 }

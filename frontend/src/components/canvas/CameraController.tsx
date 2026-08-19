@@ -6,14 +6,23 @@ import { OrbitControls as OrbitControlsImpl } from 'three-stdlib';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
-import { getInvolvedClusterIndices, calculateClusterCameraFraming } from '@/lib/utils/math';
+
+/**
+ * Panel width in screen pixels ≈ 480px + 24px margin.
+ * With a default FoV=42° at distance Z=7–11, the visible half-width (NDC) maps
+ * to roughly 5–7 world units at distance 7.  We shift the camera lookAt by
+ * PANEL_WORLD_SHIFT units left to compensate the panel occupying the right side.
+ */
+const PANEL_WORLD_SHIFT_X = -1.8;   // World-space left shift when panel is open
+const PANEL_CAM_SHIFT_X = -1.6;   // Camera position X shift (slightly less)
 
 interface CameraControllerProps {
   state: GraphSystemState;
   subgraphData?: DynamicSubgraphData | null;
+  panelOpen?: boolean;
 }
 
-export function CameraController({ state, subgraphData }: CameraControllerProps) {
+export function CameraController({ state, subgraphData, panelOpen = false }: CameraControllerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const { camera } = useThree();
 
@@ -21,36 +30,22 @@ export function CameraController({ state, subgraphData }: CameraControllerProps)
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const isTransitioning = useRef(true);
 
-  // Trigger smooth transition whenever state or subgraphData changes
+  // Compute base camera target whenever state or subgraph changes
   useEffect(() => {
     isTransitioning.current = true;
 
+    // Do not shift the camera even when the panel is open, keeping the graph centered at the origin (0, 0, 0)
+    const xShift = 0;
+    const lookShift = 0;
+
     switch (state) {
       case 'STATE_GALAXY_VIEW':
-        // Centroid Core Regular Tetrahedron Overview (Core [0,0,0] + 4 Vertices R=3.1, Z=11.5 for 100% safe margin)
-        targetCamPos.current.set(0, 0.15, 11.5);
-        targetLookAt.current.set(0, 0.0, 0);
-        break;
-
-      case 'STATE_GRAPH_TRAVERSAL': {
-        // Dynamic multi-cluster framing: identify involved clusters and frame them compactly
-        const rawNodes = subgraphData?.nodes || [];
-        const artNumbers = rawNodes.map((n) => {
-          const match = n.id.match(/(\d+)/) || (n.articleNumber && n.articleNumber.match(/(\d+)/));
-          return match ? parseInt(match[1], 10) : 13;
-        });
-
-        const activeClusters = getInvolvedClusterIndices(artNumbers.length > 0 ? artNumbers : [13]);
-        const { camPos, lookAt } = calculateClusterCameraFraming(activeClusters);
-
-        targetCamPos.current.copy(camPos);
-        targetLookAt.current.copy(lookAt);
-        break;
-      }
-
+      case 'STATE_QUERYING':
+      case 'STATE_GRAPH_TRAVERSAL':
       case 'STATE_VECTOR_SEARCH':
-        targetCamPos.current.set(-1.7, 1.1, 3.2);
-        targetLookAt.current.set(-1.7, 1.1, 0.4);
+        // Maintain the overall DB graph overview camera perspective
+        targetCamPos.current.set(0 + xShift, 0.15, 11.5);
+        targetLookAt.current.set(0 + lookShift, 0.0, 0);
         break;
 
       case 'STATE_IDLE':
@@ -61,7 +56,7 @@ export function CameraController({ state, subgraphData }: CameraControllerProps)
         targetLookAt.current.set(0, 0, 0);
         break;
     }
-  }, [state, subgraphData]);
+  }, [state, subgraphData, panelOpen]);
 
   // Allow immediate user override on mouse/touch interaction
   useEffect(() => {
@@ -82,10 +77,11 @@ export function CameraController({ state, subgraphData }: CameraControllerProps)
     if (!controlsRef.current) return;
 
     if (isTransitioning.current) {
-      camera.position.lerp(targetCamPos.current, 3.5 * delta);
-      controlsRef.current.target.lerp(targetLookAt.current, 3.5 * delta);
+      // Smooth lerp — slightly faster (4.0) so the panel shift feels snappy
+      camera.position.lerp(targetCamPos.current, 4.0 * delta);
+      controlsRef.current.target.lerp(targetLookAt.current, 4.0 * delta);
 
-      if (camera.position.distanceTo(targetCamPos.current) < 0.05) {
+      if (camera.position.distanceTo(targetCamPos.current) < 0.04) {
         isTransitioning.current = false;
       }
     }

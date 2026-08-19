@@ -3,6 +3,12 @@
 ## 1. 프로젝트 개요 (Project Overview)
 본 프로젝트는 대규모 지식 그래프(Knowledge Graph) 및 GraphRAG(Graph Retrieval-Augmented Generation) 시스템을 3D Three.js 캔버스 상에서 실시간으로 시각화하고 탐색할 수 있는 차세대 인터랙티브 풀스택 플랫폼입니다.
 
+## ⚠️ Token & Tool Constraints
+
+- **STRICT NO BROWSER AGENT**: Never trigger automated browser navigation, DOM parsing, mouse clicks, or visual rendering checks (e.g., `Exploring browser`, `http://localhost:*`).
+- **NO VISUAL VERIFICATION LOOPS**: Visual layout, graph centering, CSS styles, and UI functionality must be verified by the user, not by the agent.
+- **CONCISE CONTEXT**: Focus purely on analyzing and modifying target code files (React components, API endpoints, logic scripts) to minimize token consumption and avoid quota exhaustion.
+
 ---
 
 ## 2. 시스템 아키텍처 (System Architecture)

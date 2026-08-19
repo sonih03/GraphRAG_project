@@ -10,14 +10,6 @@ interface LaserTraversalEdgesProps {
   subgraphData?: DynamicSubgraphData | null;
 }
 
-// Fallback nodes for default 제13조 traversal
-const DEFAULT_NODES: DynamicSubgraphNode[] = [
-  { id: 'KR-CIVIL-ART-13', articleNumber: '제13조', title: '피한정후견인의 행위와 동의', summary: '한정후견인의 동의를 필요로 하는 행위', type: 'origin_node' },
-  { id: 'KR-CIVIL-ART-14', articleNumber: '제14조', title: '한정후견종료의 심판', summary: '한정후견개시 원인 소멸 시 종료 심판', type: 'traversal_node' },
-  { id: 'KR-CIVIL-ART-15', articleNumber: '제15조', title: '상대방의 확답촉구권', summary: '1개월 이상 기간 정하여 추인 여부 확답 촉구 (준용)', type: 'traversal_node' },
-  { id: 'KR-CIVIL-ART-16', articleNumber: '제16조', title: '피특정후견인의 행위와 보호', summary: '일상용품 구입 등 일상생활 필요행위 예외', type: 'traversal_node' },
-];
-
 export function LaserTraversalEdges({ subgraphData }: LaserTraversalEdgesProps) {
   const groupRef = useRef<THREE.Group>(null);
   const drawProgress = useRef(0);
@@ -29,7 +21,7 @@ export function LaserTraversalEdges({ subgraphData }: LaserTraversalEdgesProps) 
 
   // Compute exact real-world 3D positions for each article node in the cluster
   const nodesWithPositions = useMemo(() => {
-    const rawNodes = subgraphData?.nodes && subgraphData.nodes.length > 0 ? subgraphData.nodes : DEFAULT_NODES;
+    const rawNodes = subgraphData?.nodes && subgraphData.nodes.length > 0 ? subgraphData.nodes : [];
 
     return rawNodes.map((node) => {
       const match = node.id.match(/(\d+)/) || (node.articleNumber && node.articleNumber.match(/(\d+)/));
@@ -52,11 +44,7 @@ export function LaserTraversalEdges({ subgraphData }: LaserTraversalEdgesProps) 
 
   // Build dynamic laser lines with animated vertex positions
   const lineItems = useMemo(() => {
-    const rawEdges = subgraphData?.edges && subgraphData.edges.length > 0 ? subgraphData.edges : [
-      { id: 'e-13-14', source: 'KR-CIVIL-ART-13', target: 'KR-CIVIL-ART-14', type: 'MUTATIS_MUTANDIS' as const, color: '#10b981' },
-      { id: 'e-13-15', source: 'KR-CIVIL-ART-13', target: 'KR-CIVIL-ART-15', type: 'MUTATIS_MUTANDIS' as const, color: '#10b981' },
-      { id: 'e-13-16', source: 'KR-CIVIL-ART-13', target: 'KR-CIVIL-ART-16', type: 'EXCEPTION_TO' as const, color: '#ef4444' },
-    ];
+    const rawEdges = subgraphData?.edges && subgraphData.edges.length > 0 ? subgraphData.edges : [];
 
     return rawEdges.map((edge, idx) => {
       const p1 = nodeMap.get(edge.source) || [0, 0, 0];

@@ -179,6 +179,76 @@ class Neo4jService:
         }
 
     @classmethod
+    def get_dynamic_rag_subgraph(cls, query_text: str) -> Dict[str, Any]:
+        import re
+        # 1. Extract keywords from text
+        keywords = [k.strip() for k in re.split(r'[\s,\.\?\!]+', query_text) if len(k.strip()) >= 1]
+
+        keyword_str = " ".join(keywords)
+
+        # Priority mapping: covers a broad range of Korean civil law scenarios
+        keyword_article_map = [
+            # 물권 관련
+            (["땅", "토지", "구조물", "침범", "철거", "소유물", "방해제거", "소유권방해", "무단설치"], "214"),
+            (["소유물반환", "인도", "점유회수", "반환청구"], "213"),
+            (["취득시효", "점유취득", "20년", "공연", "평온"], "245"),
+            (["지상권", "건물소유", "용익물권"], "279"),
+            (["전세권", "전세"], "303"),
+            (["유치권", "유치"], "320"),
+            (["저당권", "저당", "담보"], "356"),
+            # 채권 관련
+            (["손해배상", "손배", "불법행위", "가해행위", "피해보상"], "750"),
+            (["부당이득", "이득반환", "지료", "임료", "무단사용"], "741"),
+            (["계약", "청약", "승낙", "계약체결"], "527"),
+            (["채무불이행", "불이행", "이행지체", "이행불능"], "390"),
+            (["위자료", "정신적손해"], "751"),
+            (["연대채무", "연대보증"], "413"),
+            (["보증", "보증인", "보증채무"], "428"),
+            # 가족/친족 관련
+            (["이혼", "혼인해소", "혼인취소"], "840"),
+            (["혼인", "결혼", "배우자"], "812"),
+            (["양육", "양육비", "친권"], "909"),
+            (["상속", "유산", "유증", "피상속인"], "997"),
+            (["유언", "유언장", "유언서"], "1065"),
+            # 총칙 관련
+            (["한정후견", "피한정후견", "행위능력", "동의"], "13"),
+            (["미성년", "미성년자", "법정대리인"], "5"),
+            (["소멸시효", "시효소멸", "청구권소멸"], "162"),
+            (["법인", "사단법인", "재단법인"], "31"),
+        ]
+
+        for keywords_list, article_id in keyword_article_map:
+            if any(w in keyword_str for w in keywords_list):
+                return cls.get_article_subgraph(target_query=article_id)
+
+        # 3. Dynamic Cypher lookup based on keyword matches in Neo4j fullText (single query optimization)
+        driver = cls.get_driver()
+        found_id = None
+        valid_keywords = [kw for kw in keywords if len(kw) >= 2]
+        
+        if valid_keywords:
+            cypher = """
+            MATCH (a:Article)
+            WHERE any(kw IN $keywords WHERE a.fullText CONTAINS kw OR a.title CONTAINS kw OR a.name CONTAINS kw OR a.summary CONTAINS kw)
+            RETURN a.id AS id
+            LIMIT 1
+            """
+            try:
+                with driver.session() as session:
+                    result = session.run(cypher, keywords=valid_keywords)
+                    rec = result.single()
+                    if rec:
+                        found_id = rec["id"]
+            except Exception as e:
+                logger.warning(f"Neo4j keyword search failed: {e}")
+
+        if found_id:
+            return cls.get_article_subgraph(target_query=found_id)
+
+        # Fallback to general default (Article 13)
+        return cls.get_article_subgraph(target_query="13")
+
+    @classmethod
     def _get_fallback_art13_subgraph(cls) -> Dict[str, Any]:
         return {
             "target_id": "KR-CIVIL-ART-13",

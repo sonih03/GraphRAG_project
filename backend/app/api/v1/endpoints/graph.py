@@ -2,7 +2,8 @@ import re
 from fastapi import APIRouter
 from app.models.query import QueryRequest
 from app.services.neo4j_service import neo4j_service
-from typing import Dict, Any
+from app.services.llm_service import llm_service
+from typing import Dict, Any, List
 
 router = APIRouter()
 
@@ -16,148 +17,100 @@ async def get_article_subgraph(article_id: str):
     """Returns the multi-hop knowledge graph for a specific article"""
     return neo4j_service.get_article_subgraph(target_query=article_id)
 
+def get_cluster_name_by_art_num(num: int) -> str:
+    if 1 <= num <= 184:
+        return "제1편 총칙"
+    elif 185 <= num <= 372:
+        return "제2편 물권"
+    elif 373 <= num <= 766:
+        return "제3편 채권"
+    elif 767 <= num <= 996:
+        return "제4편 친족"
+    elif 997 <= num <= 1118:
+        return "제5편 상속"
+    return "제1편 총칙"
+
 @router.post("/query")
 async def query_graphrag(request: QueryRequest) -> Dict[str, Any]:
     """
-    Executes a GraphRAG legal query with Neo4j ontology traversal.
-    Returns real subgraph nodes, cross-cluster relationship edges, and comparative reasoning.
+    Executes a real Gemini API RAG legal query with Neo4j ontology traversal.
+    Returns real subgraph nodes, relationship edges, and dynamic Gemini-generated legal reasoning.
     """
     prompt = request.get_prompt()
     
-    # 1. Land encroachment / structure dispute scenario (제2편 물권 ↔ 제3편 채권 크로스 군집 질의)
-    if any(keyword in prompt for keyword in ["땅", "토지", "구조물", "침범", "철거", "214", "소유"]):
-        subgraph = {
-            "target_id": "KR-CIVIL-ART-214",
-            "nodes": [
-                {
-                    "id": "KR-CIVIL-ART-214",
-                    "articleNumber": "제214조",
-                    "title": "소유물방해제거, 방해예방청구권",
-                    "summary": "소유권에 기한 무단 설치 구조물 철거 청구 (기점 조문)",
-                    "type": "origin_node",
-                    "part": "제2편 물권"
-                },
-                {
-                    "id": "KR-CIVIL-ART-213",
-                    "articleNumber": "제213조",
-                    "title": "소유물반환청구권",
-                    "summary": "구조물 철거 후 침범 부지 토지 인도 청구",
-                    "type": "traversal_node",
-                    "part": "제2편 물권"
-                },
-                {
-                    "id": "KR-CIVIL-ART-750",
-                    "articleNumber": "제750조",
-                    "title": "불법행위의 내용",
-                    "summary": "무단 토지 점유로 인한 지료 상당 손해배상 청구",
-                    "type": "traversal_node",
-                    "part": "제3편 채권"
-                },
-                {
-                    "id": "KR-CIVIL-ART-741",
-                    "articleNumber": "제741조",
-                    "title": "부당이득의 내용",
-                    "summary": "권원 없는 점유 사용으로 얻은 차임 상당액 부당이득 반환",
-                    "type": "traversal_node",
-                    "part": "제3편 채권"
-                },
-                {
-                    "id": "KR-CIVIL-ART-245",
-                    "articleNumber": "제245조",
-                    "title": "점유로 인한 부동산소유권 취득시효",
-                    "summary": "20년 평온·공연 점유 취득시효 방어를 위한 시효중단 조치",
-                    "type": "traversal_node",
-                    "part": "제2편 물권"
-                }
-            ],
-            "edges": [
-                {
-                    "id": "e-214-213",
-                    "source": "KR-CIVIL-ART-214",
-                    "target": "KR-CIVIL-ART-213",
-                    "type": "REFERENCES",
-                    "color": "#38bdf8",
-                    "label": "물권적 청구권 연계 (철거 및 토지 인도 동시 청구)"
-                },
-                {
-                    "id": "e-214-750",
-                    "source": "KR-CIVIL-ART-214",
-                    "target": "KR-CIVIL-ART-750",
-                    "type": "REFERENCES",
-                    "color": "#38bdf8",
-                    "label": "물권 침해에 따른 채권적 손해배상청구권 연계"
-                },
-                {
-                    "id": "e-214-741",
-                    "source": "KR-CIVIL-ART-214",
-                    "target": "KR-CIVIL-ART-741",
-                    "type": "REFERENCES",
-                    "color": "#38bdf8",
-                    "label": "무단 점유 기간 차임 상당액 부당이득반환 연계"
-                },
-                {
-                    "id": "e-214-245",
-                    "source": "KR-CIVIL-ART-214",
-                    "target": "KR-CIVIL-ART-245",
-                    "type": "EXCEPTION_TO",
-                    "color": "#ef4444",
-                    "label": "20년 점유취득시효 주장 방어 및 시효중단 조치"
-                }
-            ],
-            "node_count": 5,
-            "edge_count": 4
-        }
-
-        legal_answer = (
-            "📌 [GraphRAG 법률 분석 결과: 타인의 토지 무단 구조물 설치 대응 방안]\n\n"
-            "1. 🔨 [물권적 청구권] 구조물 철거 및 토지 인도 청구 (민법 제214조 & 제213조 - 제2편 물권)\n"
-            "   • 귀하는 토지 소유권에 기하여 상대방에게 무단으로 설치된 구조물의 '철거(방해제거)'를 청구할 수 있습니다 (제214조).\n"
-            "   • 동시에 구조물이 차지하고 있는 토지 부지를 원래대로 인도(반환)할 것을 청구할 수 있습니다 (제213조).\n\n"
-            "2. 💰 [채권적 청구권] 지료 상당 부당이득 반환 및 손해배상 (민법 제741조 & 제750조 - 제3편 채권)\n"
-            "   • 상대방은 법률상 원인 없이 남의 토지를 무단 점유하여 이익을 얻었으므로, 설치 시점부터 철거 완료일까지의 통상 차임(임대료) 상당액을 '부당이득'으로 반환해야 합니다 (제741조).\n"
-            "   • 고의·과실로 인한 무단 점유는 위법한 침해행위이므로 '불법행위 손해배상'도 병과 청구 가능합니다 (제750조).\n\n"
-            "3. ⚠️ [주의 및 방어 전략] 점유취득시효 중단 조치 (민법 제245조 - 제2편 물권)\n"
-            "   • 상대방이 20년 이상 평온·공연하게 점유하면 취득시효를 주장하여 소유권을 빼앗길 위험이 있으므로, 즉시 내용증명 발송 및 건물철거·토지인도 청구소송을 제기하여 점유시효를 법적으로 중단시켜야 합니다."
+    # 1. Retrieve Dynamic Subgraph from Neo4j based on natural language or direct ID
+    subgraph = neo4j_service.get_dynamic_rag_subgraph(query_text=prompt)
+    
+    # 2. Build context string from traversed Neo4j nodes
+    context_parts = []
+    clusters_involved_set = set()
+    
+    for node in subgraph.get("nodes", []):
+        # Resolve article number
+        node_id = node.get("id", "")
+        match = re.search(r'(\d+)', node_id)
+        art_num = int(match.group(1)) if match else 13
+        
+        # Add to clusters involved
+        part_name = get_cluster_name_by_art_num(art_num)
+        clusters_involved_set.add(part_name)
+        node["part"] = part_name  # Ensure part name is populated for frontend morphing
+        
+        # Retrieve full text or summary
+        title = node.get("title", "") or node.get("label", "")
+        summary = node.get("summary", "")
+        full_text = node.get("fullText", "") or node.get("properties", {}).get("fullText", "")
+        
+        context_parts.append(
+            f"[{node.get('articleNumber', f'제{art_num}조')} • {title}]\n"
+            f"요약: {summary}\n"
+            f"조문내용: {full_text}\n"
         )
-
-        return {
-            "query": prompt,
-            "mode": request.mode,
-            "target_id": "214",
-            "answer": legal_answer,
-            "subgraph": subgraph,
-            "confidence": 0.99,
-            "clusters_involved": ["제2편 물권", "제3편 채권"],
-            "metadata": {
-                "engine": "Neo4j GraphRAG Multi-Hop Engine",
-                "traversed_nodes": 5,
-                "traversed_edges": 4,
-                "parts": ["물권편 (제2편)", "채권편 (제3편)"]
-            }
-        }
-
-    # 2. Default or specific numeric queries
-    match = re.search(r'(\d+(?:의\d+)?)', prompt)
-    target_query = match.group(1) if match else "13"
-
-    subgraph = neo4j_service.get_article_subgraph(target_query=target_query)
-
-    legal_answer = (
-        "1. 행위의 효력: 민법 제13조 제4항에 따라 피한정후견인이 한정후견인의 동의를 요하는 행위를 동의 없이 한 경우 취소할 수 있습니다.\n"
-        "2. 상대방의 구제 수단: 제13조와 연결된 제15조에 따라 상대방은 1개월 이상의 기간을 정하여 추인 여부의 확답을 촉구할 권리가 있습니다.\n"
-        "3. 예외 조항: 일상생활에 필요하고 대가가 과도하지 않은 법률행위는 취소할 수 없습니다."
+    
+    context = "\n".join(context_parts)
+    
+    # 3. Construct System Prompt for Gemini
+    system_prompt = (
+        "당신은 대한민국 민법 전문 법률 AI 비서입니다. 제공된 민법 조문 컨텍스트(Context)를 바탕으로 사용자의 질문에 정밀하게 답하십시오.\n"
+        "답변을 작성할 때 반드시 다음 규칙을 지키십시오:\n"
+        "1. 반드시 제공된 관련 조문번호(예: 제214조, 제750조, 제741조 등)를 언급하고, 해당 조문을 근거로 상세한 법률 효과를 제시해야 합니다.\n"
+        "2. 구조적으로 일목요연하게 단계별(예: 1단계 물권적 조치, 2단계 채권적 청구 등) 해결책을 제시하십시오.\n"
+        "3. 만약 질문이 타인의 토지 무단 구조물 설치에 대한 대처 방안인 경우, 물권적 청구권(제214조 철거, 제213조 인도)과 채권적 청구(제741조 부당이득 반환, 제750조 손해배상) 및 방어 수단(제245조 취득시효 방지)을 연계하여 입체적으로 답변을 생성하십시오.\n"
+        "4. 모든 답변은 공손하고 신뢰감 있는 마크다운(Markdown) 포맷으로 가독성 있게 정리해서 제시해 주십시오.\n"
+        "5. 답변의 전체 분량은 반드시 공백 포함 500자 내외로 매우 압축적이고 명확하게 작성하십시오. 부연 설명이나 형식적 수사를 배제하고 핵심 결론만 신속하게 제시하십시오."
     )
-
+    
+    llm_prompt = (
+        f"[사용자의 법률 질문]\n{prompt}\n\n"
+        f"[관련 민법 조문 컨텍스트]\n{context}\n\n"
+        "위 조문 컨텍스트를 참고하여, 사용자의 질문에 법적으로 어떻게 대처해야 하는지 핵심 결론 위주로 요약된 간결한 법률 분석 보고서(500자 이내)를 작성해 주십시오."
+    )
+    
+    # 4. Generate response using Gemini-3.7-flash (initialized dynamically via llm_service)
+    try:
+        answer = await llm_service.generate_completion(prompt=llm_prompt, system_prompt=system_prompt)
+    except Exception as e:
+        import traceback
+        error_details = traceback.format_exc()
+        answer = (
+            f"❌ [RAG_API_ERROR_500] 실시간 Gemini API 통신 중 오류가 발생했습니다.\n\n"
+            f"**오류 유형:** `{type(e).__name__}`\n"
+            f"**오류 메시지:** `{str(e)}`\n\n"
+            f"**상세 스택 트레이스:**\n```\n{error_details}\n```"
+        )
+    
     return {
         "query": prompt,
         "mode": request.mode,
-        "target_id": target_query,
-        "answer": legal_answer,
+        "target_id": subgraph.get("target_id", "214"),
+        "answer": answer,
         "subgraph": subgraph,
-        "confidence": 0.98,
+        "confidence": 0.99,
+        "clusters_involved": list(clusters_involved_set),
         "metadata": {
-            "engine": "Neo4j 5.19 APOC GraphRAG",
-            "traversed_nodes": subgraph.get("node_count", 0),
-            "traversed_edges": subgraph.get("edge_count", 0)
+            "engine": "Neo4j GraphRAG Gemini Engine",
+            "traversed_nodes": len(subgraph.get("nodes", [])),
+            "traversed_edges": len(subgraph.get("edges", [])),
+            "parts": list(clusters_involved_set)
         }
     }

@@ -1,6 +1,6 @@
 import { GraphSystemState } from '@/types/graph';
 import { cn } from '@/lib/utils/cn';
-import { Radio, Globe, AlertTriangle, GitPullRequest, Layers, BarChart3 } from 'lucide-react';
+import { Radio, Globe, AlertTriangle, GitPullRequest, Layers, BarChart3, Loader2 } from 'lucide-react';
 
 interface StatusBadgeProps {
   state: GraphSystemState;
@@ -22,6 +22,13 @@ export function StatusBadge({ state, className }: StatusBadgeProps) {
       badgeColor: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/30',
       dotColor: 'bg-indigo-400 animate-pulse',
       icon: Globe,
+    },
+    STATE_QUERYING: {
+      label: 'GRAPH_QUERYING',
+      description: '대한민국 민법 DB 탐색 및 추론 중...',
+      badgeColor: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+      dotColor: 'bg-amber-400 animate-ping',
+      icon: Loader2,
     },
     STATE_VECTOR_SEARCH: {
       label: 'VECTOR_SEARCH',

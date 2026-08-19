@@ -9,9 +9,10 @@ interface ControlBarProps {
   currentState: GraphSystemState;
   onSetState: (nextState: GraphSystemState) => void;
   onQueryResult?: (data: any) => void;
+  onSearchStart?: (queryText: string) => void;
 }
 
-export function ControlBar({ currentState, onSetState, onQueryResult }: ControlBarProps) {
+export function ControlBar({ currentState, onSetState, onQueryResult, onSearchStart }: ControlBarProps) {
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -47,36 +48,58 @@ export function ControlBar({ currentState, onSetState, onQueryResult }: ControlB
     if (!queryText.trim()) return;
     setLoading(true);
 
+    if (onSearchStart) {
+      onSearchStart(queryText);
+    }
+
+    const isOverviewQuery = queryText.includes('전체') || queryText.includes('데이터베이스') || queryText.includes('모두');
+    const isBenchmarkQuery = queryText.includes('벤치마크') || queryText.includes('성능') || queryText.includes('비교');
+
+    if (isOverviewQuery) {
+      onSetState('STATE_GALAXY_VIEW');
+      setLoading(false);
+      return;
+    } else if (isBenchmarkQuery) {
+      onSetState('STATE_BENCHMARK_RADAR');
+      setLoading(false);
+      return;
+    } else {
+      onSetState('STATE_QUERYING');
+    }
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
     try {
       // Call FastAPI live query endpoint
       const res = await fetch('http://localhost:8000/api/v1/graph/query', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ prompt: queryText }),
+        signal: controller.signal,
       });
 
-      if (res.ok) {
-        const data = await res.json();
-        if (onQueryResult) {
-          onQueryResult(data);
-        }
+      clearTimeout(timeoutId);
 
-        // Automatic state routing based on query keywords
-        if (queryText.includes('전체') || queryText.includes('데이터베이스') || queryText.includes('모두')) {
-          onSetState('STATE_GALAXY_VIEW');
-        } else if (queryText.includes('벤치마크') || queryText.includes('성능') || queryText.includes('비교')) {
-          onSetState('STATE_BENCHMARK_RADAR');
-        } else if (queryText.includes('단순') || queryText.includes('벡터') || queryText.includes('키워드')) {
-          onSetState('STATE_VECTOR_SEARCH');
-        } else {
-          onSetState('STATE_GRAPH_TRAVERSAL');
-        }
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const data = await res.json();
+      if (onQueryResult) {
+        onQueryResult(data);
       }
     } catch (err) {
-      console.error('Query execution failed:', err);
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.warn('Query execution timed out (45s).');
+      } else {
+        console.error('Query execution failed:', err);
+      }
       // Fallback state change
-      onSetState('STATE_GRAPH_TRAVERSAL');
+      onSetState('STATE_IDLE');
     } finally {
+      clearTimeout(timeoutId);
       setLoading(false);
     }
   };
