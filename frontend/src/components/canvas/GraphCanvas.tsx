@@ -4,6 +4,7 @@ import { Suspense } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { MorphingGraphUniverse } from './MorphingGraphUniverse';
 import { CameraController } from './CameraController';
+import { HelixSpiralDeck } from '../lecture/HelixSpiralDeck';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
 
 interface GraphCanvasProps {
@@ -11,39 +12,68 @@ interface GraphCanvasProps {
   subgraphData?: DynamicSubgraphData | null;
   panelOpen?: boolean;
   currentQuery?: string | null;
+  isBlurred?: boolean;
+  currentSlideIndex?: number;
+  isIntro?: boolean;
+  onSlideChange?: (index: number) => void;
 }
 
-export function GraphCanvas({ state, subgraphData, panelOpen = false, currentQuery }: GraphCanvasProps) {
+export function GraphCanvas({
+  state,
+  subgraphData,
+  panelOpen = false,
+  currentQuery,
+  isBlurred = false,
+  currentSlideIndex,
+  isIntro = false,
+  onSlideChange,
+}: GraphCanvasProps) {
   return (
     <div className="relative w-full h-full min-h-[600px] overflow-hidden bg-black">
       {/* Dynamic Ambient Vignette */}
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,rgba(14,165,233,0.06),transparent_70%)]" />
 
-      <Canvas
-        camera={{ position: [0, 0, 7.5], fov: 42 }}
-        gl={{ antialias: true, alpha: true }}
-        dpr={[1, 2]}
-      >
-        <ambientLight intensity={1.0} />
+      {/* Canvas Wrapper WITHOUT parent blur to prevent sibling HTML blur propagation */}
+      <div className="w-full h-full">
+        <Canvas
+          className={`transition-all duration-[800ms] ease-out ${isBlurred ? 'blur-[4px] opacity-65 scale-[1.02]' : 'blur-0 opacity-100 scale-100'
+            }`}
+          camera={{ position: [0, 0, 13.5], fov: 48 }}
+          gl={{ antialias: true, alpha: true }}
+          dpr={[1, 2]}
+        >
+          <ambientLight intensity={1.0} />
 
-        <Suspense fallback={null}>
-          {/* Central 5,000 Particle Morphing Engine */}
-          <MorphingGraphUniverse
+          <Suspense fallback={null}>
+            {/* 3D Helix Spiral Slide Deck wrapping around central DB edges */}
+            {currentSlideIndex !== undefined && (
+              <HelixSpiralDeck
+                currentSlideIndex={currentSlideIndex}
+                onSlideChange={onSlideChange}
+              />
+            )}
+
+            {/* Central 5,000 Particle Morphing Engine */}
+            <MorphingGraphUniverse
+              state={state}
+              pointCount={5000}
+              subgraphData={subgraphData}
+              panelOpen={panelOpen}
+              currentQuery={currentQuery}
+              currentSlideIndex={currentSlideIndex}
+            />
+          </Suspense>
+
+          {/* Dynamic Smooth Lerp Camera */}
+          <CameraController
             state={state}
-            pointCount={5000}
             subgraphData={subgraphData}
             panelOpen={panelOpen}
-            currentQuery={currentQuery}
+            currentSlideIndex={currentSlideIndex}
+            isIntro={isIntro}
           />
-        </Suspense>
-
-        {/* Dynamic Smooth Lerp Camera */}
-        <CameraController
-          state={state}
-          subgraphData={subgraphData}
-          panelOpen={panelOpen}
-        />
-      </Canvas>
+        </Canvas>
+      </div>
     </div>
   );
 }

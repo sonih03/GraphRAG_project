@@ -56,13 +56,13 @@ export default function Home() {
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-black text-slate-100 select-none">
-      {/* Top Header with live State Synchronized */}
-      <Header state={currentState} />
-
-      {/* Central 3D Canvas — shifts left when AI answer panel is open */}
-      <div className="w-full h-full">
+      {/* Central 3D Canvas — Fullscreen Absolute Background */}
+      <div className="absolute inset-0 z-0 w-full h-full">
         <GraphCanvas state={currentState} subgraphData={subgraphData} panelOpen={isPanelOpen} currentQuery={currentQuery} />
       </div>
+
+      {/* Top Header with live State Synchronized */}
+      <Header state={currentState} />
 
       {/* Interactive Glassmorphism Overlay Popups & GraphRAG AI Answer Box */}
       <OverlayManager

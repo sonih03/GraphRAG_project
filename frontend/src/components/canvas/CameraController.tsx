@@ -20,43 +20,75 @@ interface CameraControllerProps {
   state: GraphSystemState;
   subgraphData?: DynamicSubgraphData | null;
   panelOpen?: boolean;
+  currentSlideIndex?: number;
+  isIntro?: boolean;
 }
 
-export function CameraController({ state, subgraphData, panelOpen = false }: CameraControllerProps) {
+export function CameraController({
+  state,
+  subgraphData,
+  panelOpen = false,
+  currentSlideIndex,
+  isIntro
+}: CameraControllerProps) {
   const controlsRef = useRef<OrbitControlsImpl>(null);
   const { camera } = useThree();
 
-  const targetCamPos = useRef(new THREE.Vector3(0, 0, 7.5));
+  const targetCamPos = useRef(new THREE.Vector3(0, 0, 6.8));
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const isTransitioning = useRef(true);
 
-  // Compute base camera target whenever state or subgraph changes
+  // Compute camera orbit trajectory or fly-through target based on slide status
   useEffect(() => {
     isTransitioning.current = true;
 
-    // Do not shift the camera even when the panel is open, keeping the graph centered at the origin (0, 0, 0)
-    const xShift = 0;
-    const lookShift = 0;
+    // Check if component is rendered inside presentation mode (/lecture)
+    const isPresentationMode = currentSlideIndex !== undefined;
 
-    switch (state) {
-      case 'STATE_GALAXY_VIEW':
-      case 'STATE_QUERYING':
-      case 'STATE_GRAPH_TRAVERSAL':
-      case 'STATE_VECTOR_SEARCH':
-        // Maintain the overall DB graph overview camera perspective
-        targetCamPos.current.set(0 + xShift, 0.15, 11.5);
-        targetLookAt.current.set(0 + lookShift, 0.0, 0);
-        break;
-
-      case 'STATE_IDLE':
-      case 'STATE_COMPARE_ANSWERS':
-      case 'STATE_BENCHMARK_RADAR':
-      default:
+    if (isPresentationMode) {
+      if (isIntro) {
+        // Presentation Intro: Calm centering on the rotating IDLE sphere at origin [0,0,0]
         targetCamPos.current.set(0, 0, 6.8);
         targetLookAt.current.set(0, 0, 0);
-        break;
+        return;
+      }
+
+      // Demo Mode Specific Fly-Through Camera Overrides
+      if (currentSlideIndex === 2) {
+        targetCamPos.current.set(0, 2.5, 12.8);
+        targetLookAt.current.set(0, 0.3, 0);
+      } else if (currentSlideIndex === 8) {
+        targetCamPos.current.set(3.5, 2.2, 4.2);
+        targetLookAt.current.set(2.4, 1.6, 1.8);
+      } else if (currentSlideIndex === 11) {
+        targetCamPos.current.set(-2.8, -2.2, 4.0);
+        targetLookAt.current.set(-1.8, -1.2, 1.8);
+      } else {
+        // Standard Slide View: Zoomed-in stable front perspective facing the rotating helix
+        targetCamPos.current.set(0, 0, 5.4);
+        targetLookAt.current.set(0, 0, 0);
+      }
+    } else {
+      // Main RAG Homepage (http://localhost:3000): 100% Identical to /lecture IDLE camera [0, 0, 6.8]
+      switch (state) {
+        case 'STATE_GALAXY_VIEW':
+        case 'STATE_QUERYING':
+        case 'STATE_GRAPH_TRAVERSAL':
+        case 'STATE_VECTOR_SEARCH':
+          targetCamPos.current.set(0, 0, 11.5);
+          targetLookAt.current.set(0, 0, 0);
+          break;
+
+        case 'STATE_IDLE':
+        case 'STATE_COMPARE_ANSWERS':
+        case 'STATE_BENCHMARK_RADAR':
+        default:
+          targetCamPos.current.set(0, 0, 6.8);
+          targetLookAt.current.set(0, 0, 0);
+          break;
+      }
     }
-  }, [state, subgraphData, panelOpen]);
+  }, [state, subgraphData, panelOpen, currentSlideIndex, isIntro]);
 
   // Allow immediate user override on mouse/touch interaction
   useEffect(() => {
@@ -70,7 +102,7 @@ export function CameraController({ state, subgraphData, panelOpen = false }: Cam
     controls.addEventListener('start', handleUserStart);
     return () => {
       controls.removeEventListener('start', handleUserStart);
-    };
+    }; 0.0
   }, []);
 
   useFrame((_, delta) => {
@@ -93,11 +125,10 @@ export function CameraController({ state, subgraphData, panelOpen = false }: Cam
     <OrbitControls
       ref={controlsRef}
       makeDefault
-      enableRotate={true}
+      enableRotate={false}
       enableZoom={true}
-      enablePan={true}
+      enablePan={false}
       zoomSpeed={1.2}
-      rotateSpeed={0.9}
       minDistance={1.2}
       maxDistance={40.0}
       dampingFactor={0.08}

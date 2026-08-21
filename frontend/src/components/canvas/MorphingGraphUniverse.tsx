@@ -20,6 +20,7 @@ interface MorphingGraphUniverseProps {
   subgraphData?: DynamicSubgraphData | null;
   panelOpen?: boolean;
   currentQuery?: string | null;
+  currentSlideIndex?: number;
 }
 
 export function MorphingGraphUniverse({
@@ -28,6 +29,7 @@ export function MorphingGraphUniverse({
   subgraphData,
   panelOpen = false,
   currentQuery,
+  currentSlideIndex,
 }: MorphingGraphUniverseProps) {
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
@@ -104,7 +106,15 @@ export function MorphingGraphUniverse({
     const progress = morphProgress.current;
 
     // Rotation control
-    if (isOverview) {
+    const isPresentation = currentSlideIndex !== undefined;
+    const isDemoGalaxy = currentSlideIndex === 2;
+
+    if (isPresentation && !isDemoGalaxy) {
+      // In presentation mode, stabilize central Part 1-Part 5 edge spine at origin
+      groupRef.current.rotation.y = THREE.MathUtils.damp(groupRef.current.rotation.y, 0, 4.0, delta);
+      groupRef.current.rotation.x = THREE.MathUtils.damp(groupRef.current.rotation.x, 0, 4.0, delta);
+      groupRef.current.rotation.z = THREE.MathUtils.damp(groupRef.current.rotation.z, 0, 4.0, delta);
+    } else if (isOverview) {
       // GALAXY_VIEW: Serene continuous cosmic rotation showcasing 3D tetrahedron depth
       groupRef.current.rotation.y += delta * 0.07;
       groupRef.current.rotation.x = Math.sin(Date.now() * 0.00012) * 0.04;
@@ -237,6 +247,7 @@ export function MorphingGraphUniverse({
         activeClusterIndices={Array.from(activeClustersSet)}
         subgraphData={subgraphData}
         currentQuery={currentQuery}
+        currentSlideIndex={currentSlideIndex}
       />
 
       {/* 3D Progressive Laser Traversal Beams when in STATE_GRAPH_TRAVERSAL */}

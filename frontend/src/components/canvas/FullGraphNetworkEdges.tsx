@@ -27,6 +27,7 @@ interface FullGraphNetworkEdgesProps {
   activeClusterIndices?: number[];
   subgraphData?: DynamicSubgraphData | null;
   currentQuery?: string | null;
+  currentSlideIndex?: number;
 }
 
 /**
@@ -145,6 +146,7 @@ export function FullGraphNetworkEdges({
   activeClusterIndices = [0],
   subgraphData,
   currentQuery,
+  currentSlideIndex,
 }: FullGraphNetworkEdgesProps) {
   const [edgesData, setEdgesData] = useState<OverviewEdge[]>([]);
   const groupRef = useRef<THREE.Group>(null);
@@ -212,6 +214,7 @@ export function FullGraphNetworkEdges({
       if (!srcMatch || !tgtMatch) return;
       const srcNum = parseInt(srcMatch[1], 10);
       const tgtNum = parseInt(tgtMatch[1], 10);
+
       const p1 = getArticlePosition(srcNum);
       const p2 = getArticlePosition(tgtNum);
       const col = edge.type === 'EXCEPTION_TO' ? exceptColor
