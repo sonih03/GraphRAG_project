@@ -280,7 +280,7 @@ export function HelixSpiralDeck({ currentSlideIndex, onSlideChange }: HelixSpira
 
   // Active Theory Reference Helix Mathematics
   const cardRadius = 3.2; // Radius from central DB edge spine
-  const ySpacing = 1.8;   // Vertical distance between cards
+  const ySpacing = 2.5;   // Vertical distance between cards (Y축만 수정)
   const angleStep = 0.75; // Angle increment along spiral (~43 degrees)
 
   const currentScrollRef = useRef(currentSlideIndex - 1);
@@ -359,7 +359,7 @@ export function HelixSpiralDeck({ currentSlideIndex, onSlideChange }: HelixSpira
     };
   }, [onSlideChange]);
 
-  // Animation Loop: LERP scroll and position meshes along Helix
+  // Animation Loop: LERP scroll and update static card opacity based on distance
   useFrame(() => {
     if (!groupRef.current) return;
 
@@ -371,28 +371,35 @@ export function HelixSpiralDeck({ currentSlideIndex, onSlideChange }: HelixSpira
       const mesh = child as THREE.Mesh;
       if (!mesh || !mesh.material) return;
 
-      const scrollOffset = idx - scroll;
-
-      // Active Theory Reference Helix Mathematics
-      const angle = scrollOffset * angleStep;
-      const y = -scrollOffset * ySpacing;
+      // 카드는 3D 공간의 나선형 경로 상에 정적으로 완전히 고정
+      const angle = idx * angleStep;
+      const y = -(idx - 6) * ySpacing;
       const x = Math.sin(angle) * cardRadius;
       const z = Math.cos(angle) * cardRadius;
 
       mesh.position.set(x, y, z);
 
-      // Face forward toward the camera at Z > 0
-      mesh.rotation.y = -angle;
+      // 카드의 각도 수정 (앞면이 카메라를 정방향으로 마주보고, 척추망과 나란히 서도록 설정)
+      mesh.rotation.y = angle;
+      mesh.rotation.x = 0;
 
-      // Subtle tilt towards camera based on Y distance
-      mesh.rotation.x = -y * 0.04;
+      // 홀로그래픽 어라이벌 투명도 연산
+      const targetIdx = Math.round(targetScrollRef.current);
+      const distFromCenter = Math.abs(idx - scroll);
+      const speed = Math.abs(targetScrollRef.current - scroll);
 
-      // Fade out distant cards
-      const distFromCenter = Math.abs(scrollOffset);
-      const opacity = Math.max(0, 1 - distFromCenter * 0.22);
+      let opacity = 0;
+      if (idx === targetIdx) {
+        // 목적지 카드는 도착 직전(speed < 0.33)에만 페이드인 시작
+        opacity = Math.max(0, 1.0 - speed * 3.0);
+      } else {
+        // 이전 카드는 이동 시작 즉시 빠르게 페이드아웃
+        opacity = Math.max(0, 1.0 - distFromCenter * 1.5);
+      }
+
       const mat = mesh.material as THREE.MeshStandardMaterial;
       mat.opacity = opacity;
-      mesh.visible = opacity > 0.04;
+      mesh.visible = opacity > 0.01;
     });
   });
 

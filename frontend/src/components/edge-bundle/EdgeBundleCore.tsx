@@ -4,112 +4,118 @@ import { useMemo, useRef } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 
+const PILLAR_HEIGHT = 36;
 const STRAND_COUNT = 240;
-const PILLAR_HEIGHT = 24;
 
-// Canvas's 3 edge colors
-const colorBlue = new THREE.Color('#38bdf8');  // Sky Blue (References)
-const colorGreen = new THREE.Color('#10b981'); // Emerald Green (Mutatis Mutandis)
-const colorRed = new THREE.Color('#ef4444');   // Crimson Red (Exception To)
+// 메인 색상(딥퍼플 35% + 민트 35% = 70%)과 포인트 색상(골드 15% + 시안 10% + 화이트 5% = 30%) 배분
+function getRandomSolidColor(): THREE.Color {
+  const rand = Math.random();
 
-function getStrandColor(s: number): THREE.Color {
-  const idx = s % 3;
-  if (idx === 0) return colorBlue;
-  if (idx === 1) return colorGreen;
-  return colorRed;
+  if (rand < 0.35) {
+    return new THREE.Color('#7e22ce'); // 35% 딥 퍼플 (Main)
+  } else if (rand < 0.70) {
+    return new THREE.Color('#2dd4bf'); // 35% 민트 (Main)
+  } else if (rand < 0.85) {
+    return new THREE.Color('#fbbf24'); // 15% 골드 (Point)
+  } else if (rand < 0.95) {
+    return new THREE.Color('#38bdf8'); // 10% 시안 (Point)
+  } else {
+    return new THREE.Color('#ffffff'); // 5% 화이트 하이라이트 (Point)
+  }
 }
 
-export function EdgeBundleCore() {
-  const pillarRef = useRef<THREE.Group>(null);
+interface EdgeBundleCoreProps {
+  state?: string;
+}
 
-  // 1. Generate deterministic parameters for 240 strands to prevent SSR hydration mismatch
-  const strandParams = useMemo(() => {
+export function EdgeBundleCore({ state }: EdgeBundleCoreProps) {
+  const groupRef = useRef<THREE.Group>(null);
+  const meshRef = useRef<THREE.LineSegments>(null);
+  const materialRef = useRef<THREE.LineBasicMaterial>(null);
+
+  // 1. 불규칙한 각도 및 반경을 가진 직선 좌표와 고유 단색 생성
+  const strandConfigs = useMemo(() => {
     const list = [];
-    for (let s = 0; s < STRAND_COUNT; s++) {
-      const radiusOffset = ((s * 17.31) % 1.2) - 0.6;
-      const twistSpeed = (s % 3 === 0 ? 1 : 1.2) * (s % 7 === 0 ? -1 : 1);
-      list.push({ radiusOffset, twistSpeed });
+
+    for (let i = 0; i < STRAND_COUNT; i++) {
+      const baseAngle = (i / STRAND_COUNT) * Math.PI * 2;
+      const strandColor = getRandomSolidColor();
+      const direction = Math.random() > 0.45 ? 1 : -1;
+
+      // 불규칙 꺾임 계수: 수직에 가까운 선부터 크게 기울어진 선까지 분산
+      const slantIntensity = Math.pow(Math.random(), 2.2) * 0.85 + (Math.random() < 0.15 ? 0.01 : 0.08);
+      const topAngle = baseAngle + direction * (slantIntensity * Math.PI * 2);
+
+      // 상/하단 반경 독립 분산 (0.4 ~ 1.2로 두께 대폭 축소)
+      const bottomRadius = 0.4 + Math.random() * 0.8;
+      const topRadius = 0.4 + Math.random() * 0.8;
+
+      // 상/하단 끝점 높이 지그재그 편차
+      const bottomY = -PILLAR_HEIGHT / 2 + (Math.random() - 0.5) * 1.5;
+      const topY = PILLAR_HEIGHT / 2 + (Math.random() - 0.5) * 1.5;
+
+      const startX = Math.cos(baseAngle) * bottomRadius;
+      const startZ = Math.sin(baseAngle) * bottomRadius;
+
+      const endX = Math.cos(topAngle) * topRadius;
+      const endZ = Math.sin(topAngle) * topRadius;
+
+      list.push({
+        start: new THREE.Vector3(startX, bottomY, startZ),
+        end: new THREE.Vector3(endX, topY, endZ),
+        strandColor,
+      });
     }
     return list;
   }, []);
 
-  // 2. Build geometry for static spiral strands
+  // 2. 가닥별 단색 1:1 매핑 (직선 세그먼트 생성)
   const { linePositions, lineColors } = useMemo(() => {
-    const SEGMENTS_PER_STRAND = 64;
     const posList: number[] = [];
     const colList: number[] = [];
 
-    for (let s = 0; s < STRAND_COUNT; s++) {
-      const strandAngleOffset = (s / STRAND_COUNT) * Math.PI * 2;
-      const { radiusOffset, twistSpeed } = strandParams[s];
-      const totalTurns = 1.8 * Math.PI * 2 * twistSpeed;
+    strandConfigs.forEach((cfg) => {
+      // 시작점
+      posList.push(cfg.start.x, cfg.start.y, cfg.start.z);
+      // 끝점
+      posList.push(cfg.end.x, cfg.end.y, cfg.end.z);
 
-      let prevPoint = null;
-      let prevColor = null;
-
-      for (let i = 0; i <= SEGMENTS_PER_STRAND; i++) {
-        const t = i / SEGMENTS_PER_STRAND;
-        const y = (t - 0.5) * PILLAR_HEIGHT;
-
-        // Uniform thickness: constant base radius of 2.2 instead of hyperboloid equation
-        const radius = 2.2 + radiusOffset;
-
-        const theta = strandAngleOffset + t * totalTurns + Math.sin(t * Math.PI * 3) * 0.2;
-
-        const x = Math.cos(theta) * radius + Math.sin(y * 0.5 + s) * 0.15;
-        const z = Math.sin(theta) * radius + Math.cos(y * 0.5 + s) * 0.15;
-
-        const currentPoint = new THREE.Vector3(x, y, z);
-        const currentColor = getStrandColor(s);
-
-        if (prevPoint && prevColor) {
-          posList.push(prevPoint.x, prevPoint.y, prevPoint.z);
-          posList.push(currentPoint.x, currentPoint.y, currentPoint.z);
-
-          colList.push(prevColor.r, prevColor.g, prevColor.b);
-          colList.push(currentColor.r, currentColor.g, currentColor.b);
-        }
-
-        prevPoint = currentPoint;
-        prevColor = currentColor;
-      }
-    }
+      // 가닥 전체에 동일한 고유 단색 주입
+      colList.push(cfg.strandColor.r, cfg.strandColor.g, cfg.strandColor.b);
+      colList.push(cfg.strandColor.r, cfg.strandColor.g, cfg.strandColor.b);
+    });
 
     return {
-      linePositions: new Float32BufferAttributeWrapper(posList),
-      lineColors: new Float32BufferAttributeWrapper(colList),
+      linePositions: new Float32Array(posList),
+      lineColors: new Float32Array(colList),
     };
-  }, [strandParams]);
+  }, [strandConfigs]);
 
-  // 3. Shared Canvas Texture for soft glowing particles
-  const particleTexture = useMemo(() => {
-    if (typeof window === 'undefined') return null;
-    const canvas = document.createElement('canvas');
-    canvas.width = 32;
-    canvas.height = 32;
-    const ctx = canvas.getContext('2d');
-    if (ctx) {
-      const grad = ctx.createRadialGradient(16, 16, 0, 16, 16, 16);
-      grad.addColorStop(0, 'rgba(255,255,255,1)');
-      grad.addColorStop(0.3, 'rgba(255,255,255,0.7)');
-      grad.addColorStop(1, 'rgba(255,255,255,0)');
-      ctx.fillStyle = grad;
-      ctx.fillRect(0, 0, 32, 32);
+  useFrame((stateContext, delta) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = stateContext.clock.getElapsedTime() * 0.05;
     }
-    return new THREE.CanvasTexture(canvas);
-  }, []);
 
-  useFrame((state, delta) => {
-    // Slow rotation of entire core
-    if (pillarRef.current) {
-      pillarRef.current.rotation.y = state.clock.getElapsedTime() * 0.12;
+    if (materialRef.current) {
+      // lecture 전용 모드이므로 상태와 관계없이 항상 선명하게 노출(0.35)
+      const targetOpacity = 0.35;
+
+      materialRef.current.opacity = THREE.MathUtils.damp(
+        materialRef.current.opacity,
+        targetOpacity,
+        3.5,
+        delta
+      );
+
+      if (meshRef.current) {
+        meshRef.current.visible = true; // 항상 보이도록 고정
+      }
     }
   });
 
   return (
-    <group ref={pillarRef}>
-      {/* 240 Twisted Spiral Strands */}
-      <lineSegments>
+    <group ref={groupRef}>
+      <lineSegments ref={meshRef}>
         <bufferGeometry>
           <bufferAttribute
             attach="attributes-position"
@@ -121,147 +127,10 @@ export function EdgeBundleCore() {
           />
         </bufferGeometry>
         <lineBasicMaterial
+          ref={materialRef}
           vertexColors={true}
           transparent={true}
-          opacity={0.55}
-          blending={THREE.AdditiveBlending}
-          depthWrite={false}
-        />
-      </lineSegments>
-
-      {/* Top Cluster Node (Blue theme) */}
-      <ClusterNode
-        posY={PILLAR_HEIGHT / 2}
-        baseColor={colorBlue}
-        texture={particleTexture}
-      />
-
-      {/* Bottom Cluster Node (Red theme) */}
-      <ClusterNode
-        posY={-PILLAR_HEIGHT / 2}
-        baseColor={colorRed}
-        texture={particleTexture}
-      />
-    </group>
-  );
-}
-
-// Simple wrapper class to satisfy TypeScript for buffer attributes
-class Float32BufferAttributeWrapper extends Float32Array {
-  constructor(array: number[]) {
-    super(array);
-  }
-}
-
-interface ClusterNodeProps {
-  posY: number;
-  baseColor: THREE.Color;
-  texture: THREE.CanvasTexture | null;
-}
-
-function ClusterNode({ posY, baseColor, texture }: ClusterNodeProps) {
-  const clusterRef = useRef<THREE.Group>(null);
-  const particleCount = 700;
-
-  useFrame((state) => {
-    if (clusterRef.current) {
-      clusterRef.current.rotation.y = -state.clock.getElapsedTime() * 0.08;
-    }
-  });
-
-  // Generate particle positions, colors, and internal connections
-  const { pPositions, pColors, netPositions, netColors } = useMemo(() => {
-    const pos: number[] = [];
-    const col: number[] = [];
-    const netPos: number[] = [];
-    const netCol: number[] = [];
-
-    for (let i = 0; i < particleCount; i++) {
-      const u = Math.random();
-      const v = Math.random();
-      const theta = u * 2.0 * Math.PI;
-      const phi = Math.acos(2.0 * v - 1.0);
-      const r = Math.cbrt(Math.random()) * 3.8;
-
-      const px = r * Math.sin(phi) * Math.cos(theta);
-      const py = (r * Math.sin(phi) * Math.sin(theta)) * 0.5; // Flattered sphere
-      const pz = r * Math.cos(phi);
-
-      pos.push(px, py, pz);
-
-      const pColor = baseColor.clone();
-      // Add slight HSL offsets for visual richness
-      const tempHSL = { h: 0, s: 0, l: 0 };
-      pColor.getHSL(tempHSL);
-      pColor.setHSL(
-        tempHSL.h + (Math.random() - 0.5) * 0.06,
-        tempHSL.s,
-        tempHSL.l + (Math.random() - 0.5) * 0.15
-      );
-      col.push(pColor.r, pColor.g, pColor.b);
-    }
-
-    // Micro Network Connections (90 lines)
-    for (let i = 0; i < 90; i++) {
-      const idx1 = Math.floor(Math.random() * particleCount) * 3;
-      const idx2 = Math.floor(Math.random() * particleCount) * 3;
-
-      netPos.push(pos[idx1], pos[idx1 + 1], pos[idx1 + 2]);
-      netPos.push(pos[idx2], pos[idx2 + 1], pos[idx2 + 2]);
-
-      netCol.push(col[idx1], col[idx1 + 1], col[idx1 + 2]);
-      netCol.push(col[idx2], col[idx2 + 1], col[idx2 + 2]);
-    }
-
-    return {
-      pPositions: new Float32Array(pos),
-      pColors: new Float32Array(col),
-      netPositions: new Float32Array(netPos),
-      netColors: new Float32Array(netCol),
-    };
-  }, [baseColor]);
-
-  return (
-    <group ref={clusterRef} position={[0, posY, 0]}>
-      {/* Glow Particles */}
-      <points>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            args={[pPositions, 3]}
-          />
-          <bufferAttribute
-            attach="attributes-color"
-            args={[pColors, 3]}
-          />
-        </bufferGeometry>
-        <pointsMaterial
-          size={0.3}
-          vertexColors={true}
-          transparent={true}
-          opacity={0.7}
-          blending={THREE.AdditiveBlending}
-          map={texture || undefined}
-          depthWrite={false}
-        />
-      </points>
-
-      {/* Internal connections */}
-      <lineSegments>
-        <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            args={[netPositions, 3]}
-          />
-          <bufferAttribute
-            attach="attributes-color"
-            args={[netColors, 3]}
-          />
-        </bufferGeometry>
-        <lineBasicMaterial
-          vertexColors={true}
-          transparent={true}
-          opacity={0.3}
+          opacity={0.0} // useFrame에서 즉시 damp보간되어 나타나므로 초기값 0.0 설정
           blending={THREE.AdditiveBlending}
           depthWrite={false}
         />

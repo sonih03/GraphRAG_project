@@ -13,8 +13,10 @@ import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
  * to roughly 5–7 world units at distance 7.  We shift the camera lookAt by
  * PANEL_WORLD_SHIFT units left to compensate the panel occupying the right side.
  */
-const PANEL_WORLD_SHIFT_X = -1.8;   // World-space left shift when panel is open
-const PANEL_CAM_SHIFT_X = -1.6;   // Camera position X shift (slightly less)
+const CARD_RADIUS = 3.2;
+const Y_SPACING = 2.5;
+const ANGLE_STEP = 0.75;
+const CAMERA_DISTANCE = 2.2; // 카드 앞 카메라 배치 거리
 
 interface CameraControllerProps {
   state: GraphSystemState;
@@ -37,6 +39,14 @@ export function CameraController({
   const targetCamPos = useRef(new THREE.Vector3(0, 0, 6.8));
   const targetLookAt = useRef(new THREE.Vector3(0, 0, 0));
   const isTransitioning = useRef(true);
+  const currentScroll = useRef(0);
+
+  // 컴포넌트 마운트 시 초기 슬라이드 인덱스 반영
+  useEffect(() => {
+    if (currentSlideIndex !== undefined) {
+      currentScroll.current = currentSlideIndex - 1;
+    }
+  }, []);
 
   // Compute camera orbit trajectory or fly-through target based on slide status
   useEffect(() => {
@@ -46,47 +56,27 @@ export function CameraController({
     const isPresentationMode = currentSlideIndex !== undefined;
 
     if (isPresentationMode) {
-      if (isIntro) {
-        // Presentation Intro: Calm centering on the rotating IDLE sphere at origin [0,0,0]
+      // 프리젠테이션 모드에서는 useFrame 내부에서 나선형 동적 연산을 수행하므로 타겟 세팅을 스킵합니다.
+      return;
+    }
+
+    // Main RAG Homepage (http://localhost:3000): 100% Identical to /lecture IDLE camera [0, 0, 6.8]
+    switch (state) {
+      case 'STATE_GALAXY_VIEW':
+      case 'STATE_QUERYING':
+      case 'STATE_GRAPH_TRAVERSAL':
+      case 'STATE_VECTOR_SEARCH':
+        targetCamPos.current.set(0, 0, 11.5);
+        targetLookAt.current.set(0, 0, 0);
+        break;
+
+      case 'STATE_IDLE':
+      case 'STATE_COMPARE_ANSWERS':
+      case 'STATE_BENCHMARK_RADAR':
+      default:
         targetCamPos.current.set(0, 0, 6.8);
         targetLookAt.current.set(0, 0, 0);
-        return;
-      }
-
-      // Demo Mode Specific Fly-Through Camera Overrides
-      if (currentSlideIndex === 2) {
-        targetCamPos.current.set(0, 2.5, 12.8);
-        targetLookAt.current.set(0, 0.3, 0);
-      } else if (currentSlideIndex === 8) {
-        targetCamPos.current.set(3.5, 2.2, 4.2);
-        targetLookAt.current.set(2.4, 1.6, 1.8);
-      } else if (currentSlideIndex === 11) {
-        targetCamPos.current.set(-2.8, -2.2, 4.0);
-        targetLookAt.current.set(-1.8, -1.2, 1.8);
-      } else {
-        // Standard Slide View: Zoomed-in stable front perspective facing the rotating helix
-        targetCamPos.current.set(0, 0, 5.4);
-        targetLookAt.current.set(0, 0, 0);
-      }
-    } else {
-      // Main RAG Homepage (http://localhost:3000): 100% Identical to /lecture IDLE camera [0, 0, 6.8]
-      switch (state) {
-        case 'STATE_GALAXY_VIEW':
-        case 'STATE_QUERYING':
-        case 'STATE_GRAPH_TRAVERSAL':
-        case 'STATE_VECTOR_SEARCH':
-          targetCamPos.current.set(0, 0, 11.5);
-          targetLookAt.current.set(0, 0, 0);
-          break;
-
-        case 'STATE_IDLE':
-        case 'STATE_COMPARE_ANSWERS':
-        case 'STATE_BENCHMARK_RADAR':
-        default:
-          targetCamPos.current.set(0, 0, 6.8);
-          targetLookAt.current.set(0, 0, 0);
-          break;
-      }
+        break;
     }
   }, [state, subgraphData, panelOpen, currentSlideIndex, isIntro]);
 
@@ -102,24 +92,50 @@ export function CameraController({
     controls.addEventListener('start', handleUserStart);
     return () => {
       controls.removeEventListener('start', handleUserStart);
-    }; 0.0
+    };
   }, []);
 
   useFrame((_, delta) => {
-    if (!controlsRef.current) return;
+    const isPresentationMode = currentSlideIndex !== undefined;
 
-    if (isTransitioning.current) {
-      // Smooth lerp — slightly faster (4.0) so the panel shift feels snappy
-      camera.position.lerp(targetCamPos.current, 4.0 * delta);
-      controlsRef.current.target.lerp(targetLookAt.current, 4.0 * delta);
+    if (isPresentationMode) {
+      // 1. 슬라이드 인덱스 변화에 맞추어 스크롤 값을 0.08 댐핑 계수로 보간 (카드 덱과 싱크 동기화)
+      const targetScroll = currentSlideIndex - 1;
+      currentScroll.current += (targetScroll - currentScroll.current) * 0.08;
 
-      if (camera.position.distanceTo(targetCamPos.current) < 0.04) {
-        isTransitioning.current = false;
+      const scrollVal = currentScroll.current;
+      const angle = scrollVal * ANGLE_STEP;
+      const y = -(scrollVal - 6) * Y_SPACING; // 카드 덱 높이 오프셋 동기화
+
+      // 2. 카드가 위치한 나선형 바깥 반경(CARD_RADIUS + CAMERA_DISTANCE)에 카메라 좌표 세팅
+      const camX = Math.sin(angle) * (CARD_RADIUS + CAMERA_DISTANCE);
+      const camZ = Math.cos(angle) * (CARD_RADIUS + CAMERA_DISTANCE);
+
+      camera.position.set(camX, y, camZ);
+
+      // 3. 카메라가 카드의 중심점을 똑바로 마주보도록 직접 lookAt 실행 (OrbitControls 미관여)
+      const lookX = Math.sin(angle) * CARD_RADIUS;
+      const lookZ = Math.cos(angle) * CARD_RADIUS;
+      camera.lookAt(lookX, y, lookZ);
+    } else {
+      if (!controlsRef.current) return;
+      if (isTransitioning.current) {
+        // Smooth lerp — slightly faster (4.0) so the panel shift feels snappy
+        camera.position.lerp(targetCamPos.current, 4.0 * delta);
+        controlsRef.current.target.lerp(targetLookAt.current, 4.0 * delta);
+
+        if (camera.position.distanceTo(targetCamPos.current) < 0.04) {
+          isTransitioning.current = false;
+        }
       }
+      controlsRef.current.update();
     }
-
-    controlsRef.current.update();
   });
+
+  const isPresentationMode = currentSlideIndex !== undefined;
+  if (isPresentationMode) {
+    return null; // 프리젠테이션 모드에서는 마우스/휠 카메라 충돌을 원천 차단하기 위해 controls 비활성화
+  }
 
   return (
     <OrbitControls

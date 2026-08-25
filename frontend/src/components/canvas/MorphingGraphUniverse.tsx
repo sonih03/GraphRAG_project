@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef } from 'react';
+import { useMemo, useRef, useEffect } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
@@ -34,6 +34,17 @@ export function MorphingGraphUniverse({
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
   const queryStartTime = useRef<number | null>(null);
+  const lastRippleTime = useRef<number>(0);
+
+  // Setup low-latency window event listener for acoustic transients
+  useEffect(() => {
+    const handleRipple = () => {
+      lastRippleTime.current = Date.now();
+      console.log("[Three.js Visual Feedback] Acoustic ripple shockwave triggered!");
+    };
+    window.addEventListener('acoustic-ripple', handleRipple);
+    return () => window.removeEventListener('acoustic-ripple', handleRipple);
+  }, []);
 
   // Identify active participating clusters in current query
   const activeClustersSet = useMemo(() => {
@@ -142,6 +153,19 @@ export function MorphingGraphUniverse({
     const colAttr = pointsRef.current.geometry.attributes.color;
     if (!posAttr || !colAttr) return;
 
+    // --- Acoustic Shockwave (Ripple) calculations ---
+    const timeSinceRipple = Date.now() - lastRippleTime.current;
+    const rippleDuration = 800; // 800ms fadeout
+    let isRippleActive = false;
+    let waveRadius = 0;
+    let rippleProgress = 0;
+
+    if (timeSinceRipple < rippleDuration) {
+      isRippleActive = true;
+      rippleProgress = timeSinceRipple / rippleDuration; // 0.0 to 1.0
+      waveRadius = rippleProgress * 15.0; // wave travels up to radius 15
+    }
+
     const positions = posAttr.array as Float32Array;
     const colors = colAttr.array as Float32Array;
 
@@ -164,9 +188,25 @@ export function MorphingGraphUniverse({
       const targetOY = overviewPositions[idx + 1];
       const targetOZ = overviewPositions[idx + 2];
 
-      const targetX = THREE.MathUtils.lerp(targetSX, targetOX, progress);
-      const targetY = THREE.MathUtils.lerp(targetSY, targetOY, progress);
-      const targetZ = THREE.MathUtils.lerp(targetSZ, targetOZ, progress);
+      let targetX = THREE.MathUtils.lerp(targetSX, targetOX, progress);
+      let targetY = THREE.MathUtils.lerp(targetSY, targetOY, progress);
+      let targetZ = THREE.MathUtils.lerp(targetSZ, targetOZ, progress);
+
+      // Apply 0ms visual ripple deformation if active
+      if (isRippleActive) {
+        const dist = Math.sqrt(targetX * targetX + targetY * targetY + targetZ * targetZ);
+        const distDelta = Math.abs(dist - waveRadius);
+        if (distDelta < 1.5) {
+          const waveStrength = (1.0 - rippleProgress) * Math.sin((1.0 - distDelta / 1.5) * Math.PI) * 0.45;
+          const dirX = targetX / (dist + 1e-6);
+          const dirY = targetY / (dist + 1e-6);
+          const dirZ = targetZ / (dist + 1e-6);
+
+          targetX += dirX * waveStrength;
+          targetY += dirY * waveStrength;
+          targetZ += dirZ * waveStrength;
+        }
+      }
 
       positions[idx] = THREE.MathUtils.damp(positions[idx], targetX, 5.0, delta);
       positions[idx + 1] = THREE.MathUtils.damp(positions[idx + 1], targetY, 5.0, delta);

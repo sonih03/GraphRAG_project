@@ -7,6 +7,8 @@ import { CameraController } from './CameraController';
 import { HelixSpiralDeck } from '../lecture/HelixSpiralDeck';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
 
+import { EdgeBundleCore } from '../edge-bundle/EdgeBundleCore';
+
 interface GraphCanvasProps {
   state: GraphSystemState;
   subgraphData?: DynamicSubgraphData | null;
@@ -16,6 +18,7 @@ interface GraphCanvasProps {
   currentSlideIndex?: number;
   isIntro?: boolean;
   onSlideChange?: (index: number) => void;
+  showEdgeBundle?: boolean;
 }
 
 export function GraphCanvas({
@@ -27,6 +30,7 @@ export function GraphCanvas({
   currentSlideIndex,
   isIntro = false,
   onSlideChange,
+  showEdgeBundle = false,
 }: GraphCanvasProps) {
   return (
     <div className="relative w-full h-full min-h-[600px] overflow-hidden bg-black">
@@ -45,6 +49,9 @@ export function GraphCanvas({
           <ambientLight intensity={1.0} />
 
           <Suspense fallback={null}>
+            {/* 3D Helix Spinal Cord Core (지식 척추망) */}
+            {showEdgeBundle && <EdgeBundleCore state={state} />}
+
             {/* 3D Helix Spiral Slide Deck wrapping around central DB edges */}
             {currentSlideIndex !== undefined && (
               <HelixSpiralDeck
@@ -54,14 +61,16 @@ export function GraphCanvas({
             )}
 
             {/* Central 5,000 Particle Morphing Engine */}
-            <MorphingGraphUniverse
-              state={state}
-              pointCount={5000}
-              subgraphData={subgraphData}
-              panelOpen={panelOpen}
-              currentQuery={currentQuery}
-              currentSlideIndex={currentSlideIndex}
-            />
+            {!showEdgeBundle && (
+              <MorphingGraphUniverse
+                state={state}
+                pointCount={5000}
+                subgraphData={subgraphData}
+                panelOpen={panelOpen}
+                currentQuery={currentQuery}
+                currentSlideIndex={currentSlideIndex}
+              />
+            )}
           </Suspense>
 
           {/* Dynamic Smooth Lerp Camera */}

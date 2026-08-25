@@ -7,6 +7,7 @@ import { PresentationSlideCard } from '@/components/lecture/PresentationSlideCar
 import { SlideVisualType } from '@/components/canvas/CylindricalSlideDeck';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
 import { ChevronLeft, ChevronRight, Play, RotateCcw, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
+import { ControlBar } from '@/components/ui/ControlBar';
 
 interface SlideData {
   index: number;
@@ -239,6 +240,7 @@ export default function LecturePage() {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(1);
   const [isIntro, setIsIntro] = useState(true);
   const [isMoving, setIsMoving] = useState(false);
+  const [override3DState, setOverride3DState] = useState<GraphSystemState | null>(null);
   const currentSlide = SLIDES[currentSlideIndex - 1];
 
   // Auto-terminate intro after 2 seconds to show slide deck
@@ -250,6 +252,7 @@ export default function LecturePage() {
   // Trigger 750ms dynamic blur bypass whenever slide changes
   useEffect(() => {
     setIsMoving(true);
+    setOverride3DState(null); // Reset 3D state override on slide transitions
     const timer = setTimeout(() => setIsMoving(false), 750);
     return () => clearTimeout(timer);
   }, [currentSlideIndex]);
@@ -263,7 +266,7 @@ export default function LecturePage() {
     setCurrentSlideIndex((prev) => Math.max(prev - 1, 1));
   }, []);
 
-  // Keyboard navigation
+  // Keyboard & Hands-Free Sound Pulse navigation
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === 'Space' || e.code === 'ArrowRight') {
@@ -289,8 +292,26 @@ export default function LecturePage() {
       }
     };
 
+    // Custom Event triggers from Double/Triple snap detection
+    const handleSlideNext = () => {
+      console.log("[Lecture Page] Received slide-next event");
+      nextSlide();
+    };
+
+    const handleSlidePrev = () => {
+      console.log("[Lecture Page] Received slide-prev event");
+      prevSlide();
+    };
+
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    window.addEventListener('slide-next', handleSlideNext);
+    window.addEventListener('slide-prev', handleSlidePrev);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('slide-next', handleSlideNext);
+      window.removeEventListener('slide-prev', handleSlidePrev);
+    };
   }, [nextSlide, prevSlide]);
 
   // Inject Mock Data depending on current slide
@@ -306,8 +327,8 @@ export default function LecturePage() {
     : null;
 
   // Apply blur ONLY during motion transitions, clear completely (100% crisp) when settled/zoomed
-  const active3DState = isIntro ? 'STATE_IDLE' : currentSlide["3dState"];
-  const isBlurredActive = isMoving;
+  const active3DState = isIntro ? 'STATE_IDLE' : (override3DState || currentSlide["3dState"]);
+  const isBlurredActive = false;
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-[#05070a] font-sans text-white select-none">
@@ -325,6 +346,7 @@ export default function LecturePage() {
           currentSlideIndex={currentSlideIndex}
           isIntro={isIntro}
           onSlideChange={(idx) => setCurrentSlideIndex(idx)}
+          showEdgeBundle={true}
         />
       </div>
 
@@ -371,11 +393,10 @@ export default function LecturePage() {
             <button
               key={cat.index}
               onClick={() => setCurrentSlideIndex(cat.index)}
-              className={`text-left py-1 px-2 rounded transition-all ${
-                currentSlideIndex === cat.index
+              className={`text-left py-1 px-2 rounded transition-all ${currentSlideIndex === cat.index
                   ? 'text-sky-300 font-bold translate-x-1.5 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]'
                   : 'text-slate-400/70 hover:text-sky-300 hover:translate-x-1'
-              }`}
+                }`}
             >
               {cat.label}
             </button>
@@ -424,71 +445,15 @@ export default function LecturePage() {
         )}
       </AnimatePresence>
 
-      {/* Floating Presentation Control bar (z-index 40) */}
-      <div className="absolute bottom-6 left-6 right-6 z-40 flex items-center justify-between px-6 py-3.5 rounded-2xl border border-white/10 bg-slate-950/80 shadow-[0_8px_32px_rgba(0,0,0,0.5)] backdrop-blur-md">
-        {/* Left indicators */}
-        <div className="flex items-center space-x-4">
-          <span className="text-slate-500 font-mono text-xs">
-            {String(currentSlideIndex).padStart(2, '0')} / {String(SLIDES.length).padStart(2, '0')}
-          </span>
-          <div className="h-4 w-px bg-white/10" />
-          <span className="text-xs text-slate-300 font-medium truncate max-w-[200px] md:max-w-md">
-            {currentSlide.isDemo ? "🖥️ 실시간 3D 데모 시연" : currentSlide.title}
-          </span>
-        </div>
-
-        {/* Slide navigation controls */}
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={prevSlide}
-            disabled={currentSlideIndex === 1}
-            className="p-2 rounded-xl border border-white/5 bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all"
-            title="이전 슬라이드 (Left Arrow)"
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-
-          <div className="flex space-x-1.5 px-2">
-            {SLIDES.map((slide) => (
-              <button
-                key={slide.index}
-                onClick={() => setCurrentSlideIndex(slide.index)}
-                className={`w-2 h-2 rounded-full transition-all duration-300 ${slide.index === currentSlideIndex
-                    ? 'bg-sky-400 w-5 shadow-[0_0_8px_rgba(56,189,248,0.8)]'
-                    : slide.isDemo
-                      ? 'bg-amber-400/40 hover:bg-amber-400/80'
-                      : 'bg-white/20 hover:bg-white/40'
-                  }`}
-                title={`Slide ${slide.index}`}
-              />
-            ))}
-          </div>
-
-          <button
-            onClick={nextSlide}
-            disabled={currentSlideIndex === SLIDES.length}
-            className="p-2 rounded-xl border border-white/5 bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white disabled:opacity-40 disabled:pointer-events-none transition-all"
-            title="다음 슬라이드 (Right Arrow / Space)"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-
-          {currentSlide.isDemo && (
-            <div className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 animate-pulse text-[10px] font-semibold">
-              <Play className="w-3 h-3 fill-amber-400" />
-              <span>LIVE DEMO</span>
-            </div>
-          )}
-
-          <button
-            onClick={() => setCurrentSlideIndex(1)}
-            className="p-2 rounded-xl border border-white/5 bg-slate-900/60 hover:bg-slate-800 text-slate-400 hover:text-white transition-all ml-2"
-            title="처음으로 리셋"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
-        </div>
-      </div>
+      {/* Floating Presentation Control bar (z-index 40) - Integrated voice/snap dashboard */}
+      <ControlBar
+        currentState={active3DState}
+        onSetState={(state) => setOverride3DState(state)}
+        onSearchStart={(queryText) => {
+          // Switch automatically to Demo 3 RAG Slide upon speech recognition trigger
+          setCurrentSlideIndex(11);
+        }}
+      />
     </main>
   );
 }
