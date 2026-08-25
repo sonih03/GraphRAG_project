@@ -19,8 +19,8 @@ env/
 backend/.env
 
 # Neo4j Database & Runtime Data
-backend/data/
-data/
+backend/data/neo4j/
+data/neo4j/
 *.log
 *.jar
 
