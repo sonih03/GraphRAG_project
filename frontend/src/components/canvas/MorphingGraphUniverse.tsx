@@ -21,6 +21,7 @@ interface MorphingGraphUniverseProps {
   panelOpen?: boolean;
   currentQuery?: string | null;
   currentSlideIndex?: number;
+  visible?: boolean;
 }
 
 export function MorphingGraphUniverse({
@@ -30,6 +31,7 @@ export function MorphingGraphUniverse({
   panelOpen = false,
   currentQuery,
   currentSlideIndex,
+  visible = true,
 }: MorphingGraphUniverseProps) {
   const pointsRef = useRef<THREE.Points>(null);
   const groupRef = useRef<THREE.Group>(null);
@@ -88,7 +90,7 @@ export function MorphingGraphUniverse({
   const morphProgress = useRef(0);
 
   useFrame((rootState, delta) => {
-    if (!pointsRef.current || !groupRef.current) return;
+    if (!visible || !pointsRef.current || !groupRef.current) return;
 
     const clock = rootState.clock;
     const isQuerying = state === 'STATE_QUERYING';
@@ -258,7 +260,7 @@ export function MorphingGraphUniverse({
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} visible={visible}>
       <points ref={pointsRef}>
         <bufferGeometry>
           <bufferAttribute

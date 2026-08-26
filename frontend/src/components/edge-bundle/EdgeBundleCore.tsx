@@ -26,9 +26,10 @@ function getRandomSolidColor(): THREE.Color {
 
 interface EdgeBundleCoreProps {
   state?: string;
+  visible?: boolean;
 }
 
-export function EdgeBundleCore({ state }: EdgeBundleCoreProps) {
+export function EdgeBundleCore({ state, visible = true }: EdgeBundleCoreProps) {
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.LineSegments>(null);
   const materialRef = useRef<THREE.LineBasicMaterial>(null);
@@ -92,6 +93,8 @@ export function EdgeBundleCore({ state }: EdgeBundleCoreProps) {
   }, [strandConfigs]);
 
   useFrame((stateContext, delta) => {
+    if (!visible) return;
+
     if (groupRef.current) {
       groupRef.current.rotation.y = stateContext.clock.getElapsedTime() * 0.05;
     }
@@ -114,7 +117,7 @@ export function EdgeBundleCore({ state }: EdgeBundleCoreProps) {
   });
 
   return (
-    <group ref={groupRef}>
+    <group ref={groupRef} visible={visible}>
       <lineSegments ref={meshRef}>
         <bufferGeometry>
           <bufferAttribute

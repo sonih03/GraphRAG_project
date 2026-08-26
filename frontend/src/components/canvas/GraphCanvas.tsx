@@ -19,6 +19,7 @@ interface GraphCanvasProps {
   isIntro?: boolean;
   onSlideChange?: (index: number) => void;
   showEdgeBundle?: boolean;
+  bgTransparent?: boolean;
 }
 
 export function GraphCanvas({
@@ -31,9 +32,10 @@ export function GraphCanvas({
   isIntro = false,
   onSlideChange,
   showEdgeBundle = false,
+  bgTransparent = false,
 }: GraphCanvasProps) {
   return (
-    <div className="relative w-full h-full overflow-hidden bg-black">
+    <div className={`relative w-full h-full overflow-hidden ${bgTransparent ? 'bg-transparent' : 'bg-black'}`}>
       {/* Dynamic Ambient Vignette */}
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,rgba(14,165,233,0.06),transparent_70%)]" />
 

@@ -1,10 +1,11 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { GraphCanvas } from '@/components/canvas/GraphCanvas';
 import { SlideVisualType } from '@/components/canvas/CylindricalSlideDeck';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
-import { ControlBar } from '@/components/ui/ControlBar';
+import { OverlayManager } from '@/components/overlays/OverlayManager';
+import { AudioControlManager } from '@/lib/utils/AudioControlManager';
 
 
 interface SlideData {
@@ -222,6 +223,21 @@ export default function LecturePage() {
   const [isIntro, setIsIntro] = useState(true);
 
   const [override3DState, setOverride3DState] = useState<GraphSystemState | null>(null);
+  
+  // RAG & Voice recognition states
+  const [subgraphData, setSubgraphData] = useState<DynamicSubgraphData | null>(null);
+  const [legalAnswer, setLegalAnswer] = useState<string | null>(null);
+  const [currentQuery, setCurrentQuery] = useState<string>('');
+  const [isRecording, setIsRecording] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  // Transcript states
+  const [speechTranscript, setSpeechTranscript] = useState('');
+  const [speechState, setSpeechState] = useState<'IDLE' | 'LISTENING' | 'PROCESSING' | 'SUCCESS' | 'EMPTY'>('IDLE');
+
+  const audioManagerRef = useRef<AudioControlManager | null>(null);
+  const queryStartRef = useRef<number>(0);
+
   const currentSlide = SLIDES[currentSlideIndex - 1];
 
   // Auto-terminate intro after 2 seconds to show slide deck
@@ -291,9 +307,230 @@ export default function LecturePage() {
     };
   }, [nextSlide, prevSlide]);
 
-  // Inject Mock Data depending on current slide
-  const activeSubgraph: DynamicSubgraphData | null = null;
-  const queryText = null;
+  // RAG query execution logic
+  const executeRAGQuery = async (queryText: string) => {
+    if (!queryText.trim()) return;
+    setLoading(true);
+    setCurrentQuery(queryText);
+    queryStartRef.current = Date.now();
+    setOverride3DState('STATE_QUERYING');
+
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 45000);
+
+    try {
+      const BACKEND_URL = process.env.NEXT_PUBLIC_API_BASE_URL || 'http://localhost:8000';
+      const res = await fetch(`${BACKEND_URL}/api/v1/graph/query`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: queryText }),
+        signal: controller.signal,
+      });
+
+      clearTimeout(timeoutId);
+
+      if (!res.ok) {
+        throw new Error(`HTTP error! status: ${res.status}`);
+      }
+
+      const result = await res.json();
+      if (result) {
+        const elapsed = Date.now() - queryStartRef.current;
+        const minAnimationTime = 1200; // 1.2s connection animation
+        const delay = Math.max(0, minAnimationTime - elapsed);
+
+        setTimeout(() => {
+          const isVector = result.mode === 'vector' || result.subgraph?.mode === 'vector';
+          setOverride3DState(isVector ? 'STATE_VECTOR_SEARCH' : 'STATE_GRAPH_TRAVERSAL');
+
+          setTimeout(() => {
+            if (result.subgraph) {
+              setSubgraphData(result.subgraph);
+            }
+            if (result.answer) {
+              setLegalAnswer(result.answer);
+            } else if (result.legal_answer) {
+              setLegalAnswer(result.legal_answer);
+            }
+          }, 800);
+        }, delay);
+      }
+    } catch (err) {
+      clearTimeout(timeoutId);
+      if (err instanceof Error && err.name === 'AbortError') {
+        console.warn('RAG Query execution timed out (45s).');
+      } else {
+        console.error('RAG Query execution failed:', err);
+      }
+      setOverride3DState(null);
+    } finally {
+      clearTimeout(timeoutId);
+      setLoading(false);
+    }
+  };
+
+  // Dispatch speech text commands
+  const handleVoiceCommand = async (text: string) => {
+    const normalized = text.toLowerCase().replace(/\s+/g, '').trim(); // 공백 제거 전처리
+    console.log(`[Lecture Voice] Normalized command evaluated: "${normalized}"`);
+
+    // 1. "원래페이지로" / 원래 페이지로 / 슬라이드로 / 원래대로 복귀
+    if (
+      normalized.includes('원래페이지로') ||
+      normalized.includes('원래페이지') ||
+      normalized.includes('원래대로') ||
+      normalized.includes('슬라이드로') ||
+      normalized.includes('현재페이지로') ||
+      normalized.includes('현재페이지')
+    ) {
+      console.log("[Lecture Voice] Action: Return to last slide");
+      setOverride3DState(null);
+      setSubgraphData(null);
+      setLegalAnswer(null);
+      setCurrentQuery('');
+      return;
+    }
+
+    // 2. "데이터베이스" / 데이터 베이스 / db구조 / 디비구조 전환
+    if (
+      normalized.includes('데이터베이스') ||
+      normalized.includes('데이터베이스구조') ||
+      normalized.includes('데이터페이스') ||
+      normalized.includes('데이터이스') ||
+      normalized.includes('데이터마이스') ||
+      normalized.includes('데이터위스') ||
+      normalized.includes('대이터') ||
+      normalized.includes('전체구조') ||
+      normalized.includes('db구조') ||
+      normalized.includes('디비구조') ||
+      normalized.includes('db') ||
+      normalized.includes('디비') ||
+      normalized.includes('은하')
+    ) {
+      console.log("[Lecture Voice] Action: View Galaxy DB Structure");
+      setOverride3DState('STATE_GALAXY_VIEW');
+      setSubgraphData(null);
+      setLegalAnswer(null);
+      return;
+    }
+
+    // 3. Fallback: Legal RAG Query
+    await executeRAGQuery(text);
+  };
+
+  // Process voice transcription outcome from AudioControlManager
+  const processVoiceResult = async (transcript: string) => {
+    const cleanText = transcript.trim();
+    
+    // Ignore Whisper typical silent hallucination
+    const cleanNoSymbol = cleanText.replace(/[.\s]/g, '').trim();
+    if (cleanNoSymbol === '감사합니다' || cleanNoSymbol === 'thankyou' || cleanNoSymbol === '감사합니다.') {
+      console.log("[Lecture Voice] Suppressed Whisper silent hallucination. Action: Cancel/Empty.");
+      setSpeechState('EMPTY');
+      setSpeechTranscript('인식된 음성이 없습니다');
+      setTimeout(() => {
+        setIsRecording(false);
+        setSpeechState('IDLE');
+      }, 800);
+      return;
+    }
+
+    if (!cleanText) {
+      // Empty input -> Close overlay with cancel feedback
+      setSpeechState('EMPTY');
+      setSpeechTranscript('인식된 음성이 없습니다');
+      setTimeout(() => {
+        setIsRecording(false);
+        setSpeechState('IDLE');
+      }, 800);
+      return;
+    }
+
+    // Successful transcription
+    setSpeechState('SUCCESS');
+    setSpeechTranscript(`"${cleanText}"`);
+
+    // Let user read the recognized query for 1.2s before execution
+    setTimeout(async () => {
+      setIsRecording(false);
+      await handleVoiceCommand(cleanText);
+    }, 1200);
+  };
+
+  // Keep a ref to the latest processVoiceResult to avoid stale closure issues in AudioControlManager
+  const processVoiceResultRef = useRef(processVoiceResult);
+  useEffect(() => {
+    processVoiceResultRef.current = processVoiceResult;
+  }, [processVoiceResult]);
+
+  // Initialize AudioControlManager for mechanical mic tap & whisper
+  useEffect(() => {
+    let audioManager: AudioControlManager | null = null;
+    let isCancelled = false;
+
+    audioManager = new AudioControlManager(
+      (cmd, data) => {
+        if (isCancelled) return;
+        switch (cmd) {
+          case 'slide-next':
+            console.log("[Lecture Voice] Dispatching slide-next custom event");
+            window.dispatchEvent(new CustomEvent('slide-next'));
+            break;
+          case 'slide-prev':
+            console.log("[Lecture Voice] Dispatching slide-prev custom event");
+            window.dispatchEvent(new CustomEvent('slide-prev'));
+            break;
+          case 'mic-activate':
+            setIsRecording(true);
+            setSpeechState('LISTENING');
+            setSpeechTranscript('듣고 있습니다...');
+            break;
+          case 'mic-closing':
+            setSpeechState('PROCESSING');
+            setSpeechTranscript('분석하는 중...');
+            break;
+          case 'mic-close-and-query':
+            console.log(`[Lecture Voice] mic-close-and-query received transcript: "${data?.transcript || ''}"`);
+            processVoiceResultRef.current(data?.transcript || '');
+            break;
+          case 'acoustic-ripple':
+            window.dispatchEvent(new CustomEvent('acoustic-ripple'));
+            break;
+        }
+      }
+    );
+
+    const startManager = async () => {
+      try {
+        await audioManager.initialize();
+        if (isCancelled) {
+          audioManager.destroy();
+          return;
+        }
+        audioManagerRef.current = audioManager;
+        console.log("[Lecture Voice] AudioControlManager registered.");
+      } catch (err) {
+        console.error("[Lecture Voice] AudioControlManager init failed:", err);
+      }
+    };
+
+    startManager();
+
+    return () => {
+      isCancelled = true;
+      if (audioManagerRef.current) {
+        audioManagerRef.current.destroy();
+        audioManagerRef.current = null;
+      }
+      if (audioManager) {
+        audioManager.destroy();
+      }
+    };
+  }, []);
+
+  // Inject RAG Data and states
+  const activeSubgraph = subgraphData;
+  const queryText = currentQuery;
 
   // Apply blur ONLY during motion transitions, clear completely (100% crisp) when settled/zoomed
   const active3DState = isIntro ? 'STATE_IDLE' : (override3DState || currentSlide["3dState"]);
@@ -307,7 +544,7 @@ export default function LecturePage() {
           state={active3DState}
           subgraphData={activeSubgraph}
           isBlurred={isBlurredActive}
-          panelOpen={false}
+          panelOpen={subgraphData !== null}
           currentQuery={queryText}
           currentSlideIndex={currentSlideIndex}
           isIntro={isIntro}
@@ -315,14 +552,52 @@ export default function LecturePage() {
           showEdgeBundle={true}
         />
       </div>
-      {/* ControlBar: visually hidden but mounted to keep AudioControlManager + YAMNet snap/voice recognition alive */}
-      <div className="fixed opacity-0 pointer-events-none -bottom-[9999px]" aria-hidden="true">
-        <ControlBar
-          currentState={active3DState}
-          onSetState={(state) => setOverride3DState(state)}
-          onSearchStart={() => setCurrentSlideIndex(11)}
-        />
-      </div>
+
+      {/* RAG Answer Overlay Panel */}
+      <OverlayManager
+        state={active3DState}
+        onSetState={(s) => setOverride3DState(s)}
+        subgraphData={subgraphData}
+        legalAnswer={legalAnswer}
+        onPanelClose={() => {
+          setOverride3DState(null);
+          setSubgraphData(null);
+          setLegalAnswer(null);
+          setCurrentQuery('');
+        }}
+      />
+
+      {/* Whisper Speech Capture Visual HUD */}
+      {isRecording && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center transition-all duration-300">
+          {/* Dim Overlay background */}
+          <div className="absolute inset-0 bg-[#020408]/85 backdrop-blur-md transition-opacity duration-300" />
+          
+          {/* Central-bottom small active orb HUD */}
+          <div className="relative z-50 flex flex-col items-center gap-6 mt-[25vh]">
+            <div className="w-[320px] h-[320px] relative bg-transparent">
+              <GraphCanvas
+                state="STATE_IDLE"
+                isBlurred={false}
+                showEdgeBundle={false}
+                bgTransparent={true}
+              />
+            </div>
+            
+            {/* Transcript Text Glassmorphic Box */}
+            <div className="min-w-[280px] max-w-[500px] border border-cyan-500/20 bg-slate-950/75 backdrop-blur-2xl rounded-2xl px-6 py-3.5 text-center text-slate-100 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300">
+              <span className={`text-sm tracking-wide font-sans ${
+                speechState === 'LISTENING' ? 'text-cyan-400 animate-pulse font-medium' :
+                speechState === 'PROCESSING' ? 'text-amber-400 font-medium' :
+                speechState === 'SUCCESS' ? 'text-emerald-400 font-bold' :
+                'text-rose-400'
+              }`}>
+                {speechTranscript}
+              </span>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   );
 }
