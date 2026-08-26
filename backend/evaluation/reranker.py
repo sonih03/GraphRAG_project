@@ -11,13 +11,21 @@ class Reranker:
         self.k = k
         self.candidate_limit = candidate_limit
         self._reranker_model = None
+        self._disabled = False
 
     def _get_model(self) -> TextCrossEncoder:
+        if self._disabled:
+            raise RuntimeError("Reranker is disabled due to previous initialization failure.")
         if self._reranker_model is None:
             model_name = eval_settings.RERANKER_MODEL
             logger.info(f"Loading CPU-optimized ONNX Reranker: '{model_name}'...")
-            # FastEmbed automatically downloads and optimizes the model for CPU via ONNX Runtime
-            self._reranker_model = TextCrossEncoder(model_name=model_name)
+            try:
+                # FastEmbed automatically downloads and optimizes the model for CPU via ONNX Runtime
+                self._reranker_model = TextCrossEncoder(model_name=model_name)
+            except Exception as e:
+                self._disabled = True
+                logger.error(f"Failed to load/download Reranker model '{model_name}': {e}. Reranker will be disabled.")
+                raise e
         return self._reranker_model
 
     def compute_rrf(self, sparse_results: List[Dict[str, Any]], dense_results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
@@ -93,6 +101,9 @@ class Reranker:
         target_candidates = candidates[:self.candidate_limit]
         if not target_candidates:
             return []
+
+        if self._disabled:
+            return target_candidates
 
         logger.debug(f"Reranking top {len(target_candidates)} candidates via ONNX cross-encoder...")
         try:

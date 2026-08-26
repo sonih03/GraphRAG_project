@@ -33,7 +33,7 @@ export function GraphCanvas({
   showEdgeBundle = false,
 }: GraphCanvasProps) {
   return (
-    <div className="relative w-full h-full min-h-[600px] overflow-hidden bg-black">
+    <div className="relative w-full h-full overflow-hidden bg-black">
       {/* Dynamic Ambient Vignette */}
       <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_50%,rgba(14,165,233,0.06),transparent_70%)]" />
 
@@ -45,6 +45,7 @@ export function GraphCanvas({
           camera={{ position: [0, 0, 13.5], fov: 48 }}
           gl={{ antialias: true, alpha: true }}
           dpr={[1, 2]}
+          resize={{ scroll: false, debounce: { scroll: 0, resize: 0 } }}
         >
           <ambientLight intensity={1.0} />
 

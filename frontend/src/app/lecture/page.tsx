@@ -1,13 +1,11 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
 import { GraphCanvas } from '@/components/canvas/GraphCanvas';
-import { PresentationSlideCard } from '@/components/lecture/PresentationSlideCard';
 import { SlideVisualType } from '@/components/canvas/CylindricalSlideDeck';
 import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
-import { ChevronLeft, ChevronRight, Play, RotateCcw, AlertTriangle, FileText, CheckCircle2 } from 'lucide-react';
 import { ControlBar } from '@/components/ui/ControlBar';
+
 
 interface SlideData {
   index: number;
@@ -21,10 +19,11 @@ interface SlideData {
 }
 
 // 13 Presentation Slides aligned with LECTURE.MD
+// 11 Presentation Slides aligned with Slide.md
 const SLIDES: SlideData[] = [
   {
     index: 1,
-    title: "GraphRAG 개요: 민법 조문 준용 체인과 그래프 모델링",
+    title: "① GraphRAG 개요: 민법 조문 준용 체인과 그래프 모델링",
     subtitle: "법률 정보는 텍스트가 아닌, 관계망의 형태로 복원되어야 한다",
     bullets: [
       "대한민국 민법 조문들은 독립적으로 해석되지 않고 상호 간 촘촘한 의존망을 형성함",
@@ -39,17 +38,36 @@ const SLIDES: SlideData[] = [
   },
   {
     index: 2,
-    title: "🖥️ 데모 1: 전체 DB 구조 시연",
-    subtitle: "5,000 파티클 기반의 민법 지식 그래프 은하 구조",
-    bullets: [],
-    visualType: "text",
+    title: "② VectorRAG vs GraphRAG: 패러다임 비교",
+    subtitle: "범용성(Microsoft GraphRAG) vs 전문성(본 특화 GraphRAG)",
+    bullets: [
+      "MS GraphRAG: LLM으로 관계를 추출하므로 엄청난 빌드 비용 및 오랜 시간(수십 분) 소요",
+      "본 시스템: 고도로 정형화된 법률 문법에 맞춘 정규식 매칭을 적용하여 비용 ₩0원, 3초 만에 빌드 완료",
+      "MS GraphRAG: 커뮤니티 단위 요약문을 RAG에 활용하여 세부 디테일이 탈락할 리스크 존재",
+      "본 시스템: 조문 원문 텍스트를 고스란히 컨텍스트에 꽂아 팩트에 기반한 정교한 100% 진실성 실현"
+    ],
+    visualType: "comparison",
     "3dState": "STATE_GALAXY_VIEW",
-    isBlurred: false,
-    isDemo: true
+    isBlurred: true,
+    isDemo: false
   },
   {
     index: 3,
-    title: "② 데이터 적재 파이프라인 (1): 1, 2단계 파싱",
+    title: "③ GraphRAG 구축의 3대 한계",
+    subtitle: "비용, 속도, 환각 한계",
+    bullets: [
+      "비용 한계: 모든 청크를 대상으로 LLM을 호출하여 관계 추출 및 요약 시 기하급수적 API 요금 과금",
+      "속도 한계: 대량의 문서 분석 시 LLM API 처리 지연 및 Rate Limit 병목으로 실시간 빌드 불가",
+      "환각 한계: 확률적 텍스트 생성 특성상 법조문 번호를 오인하거나 잘못된 관계를 생성하는 법적 치명상 발생"
+    ],
+    visualType: "summary",
+    "3dState": "STATE_GALAXY_VIEW",
+    isBlurred: true,
+    isDemo: false
+  },
+  {
+    index: 4,
+    title: "④ 데이터 적재 파이프라인 (1): 1, 2단계 파싱",
     subtitle: "계층 파서(Parser)를 통한 구조 위계 보존 및 의미론적 청킹",
     bullets: [
       "민법 원본(.txt) 로드 후 유니코드 및 인코딩 정화 과정을 거치는 1단계 파이프라인",
@@ -63,11 +81,25 @@ const SLIDES: SlideData[] = [
     isDemo: false
   },
   {
-    index: 4,
-    title: "② 데이터 적재 파이프라인 (2): 왜 정규식인가? & 3단계 관계 추출",
-    subtitle: "확률론(LLM)의 한계를 극복하는 정규식 기반 결정론적 온톨로지 추출",
+    index: 5,
+    title: "⑤ 데이터 적재 파이프라인 (2): 상태 머신 다이어그램",
+    subtitle: "순차 파싱 상태 머신을 통한 contextPath 동적 매핑",
     bullets: [
-      "LLM은 확률 예측 모델이므로 조문 번호를 환각(Hallucination)하거나 관계선을 누락할 위험 존재",
+      "파서가 문서를 순차 탐색하며 편, 장, 절, 조, 항 상태를 추적 및 갱신",
+      "각 조항의 정확한 소속 위계(contextPath)를 결정론적으로 획득",
+      "구조화된 트리를 통해 법률 정보의 무손실 계층 전개 보장"
+    ],
+    visualType: "regex",
+    "3dState": "STATE_GALAXY_VIEW",
+    isBlurred: true,
+    isDemo: false
+  },
+  {
+    index: 6,
+    title: "⑥ 데이터 적재 파이프라인 (3): 3단계 관계 추출",
+    subtitle: "결정론적 온톨로지 추출을 통한 법률 관계망 구축",
+    bullets: [
+      "LLM은 확률 예측 모델이므로 조문 번호를 환각하거나 관계선을 누락할 위험 존재",
       "법률 문장은 문법 규칙이 고도로 약속되어 정형화되어 있으므로 정규식 빌드가 최선의 선택",
       "원문 속 '준용한다', '불구하고', '다만' 등의 키워드를 분석하여 3대 핵심 법률 온톨로지 적재",
       "상대 지칭('전조' ➔ 바로 이전 조문) 및 범위 지칭('내지' ➔ 중간 조문 자동 전개) 전처리 완결"
@@ -78,44 +110,14 @@ const SLIDES: SlideData[] = [
     isDemo: false
   },
   {
-    index: 5,
-    title: "② 데이터 적재 파이프라인 (3): 4단계 Neo4j 적재",
-    subtitle: "데이터 정합성 및 무중단 빌드를 보장하는 멱등성 벌크 적재",
-    bullets: [
-      "데이터 무효 유입 및 유실을 방지하기 위해 UNIQUE CONSTRAINT DDL 구조 선행 정의",
-      "500개 단위의 UNWIND Cypher 쿼리를 활용한 대용량 MERGE 배치 파이프라인 적재",
-      "총 1,118개 조문 노드, 1,034개 항 서브노드, 530개 온톨로지 엣지 적재 완수",
-      "비싼 LLM 호출 비용 ₩0원, 로컬 CPU 연산으로 단 3초 만에 전체 DB 구축 완료"
-    ],
-    visualType: "architecture",
-    "3dState": "STATE_GALAXY_VIEW",
-    isBlurred: true,
-    isDemo: false
-  },
-  {
-    index: 6,
-    title: "③ 그래프 스키마 & 쿼리 엔진 (1): Neo4j 노드/엣지 스키마",
-    subtitle: "성능과 기하학적 의미론을 융합한 지식 베이스 설계",
-    bullets: [
-      "조문(Article) 노드 프로퍼티 내부에 id, base_number, fullText, contextPath 속성 완비",
-      "노드 자체에 조문 원문 전체를 내장하여 런타임 시 추가 디스크 IO 없이 단일 쿼리로 데이터 획득",
-      "CONTAINS(편-장-절-조 위계)와 MUTATIS_MUTANDIS(준용), EXCEPTION_TO(예외) 엣지 분류",
-      "수정 및 제약 조건(modifications) 속성을 엣지에 주입하여 상세 법적 전제 조건 매핑"
-    ],
-    visualType: "ontology",
-    "3dState": "STATE_GALAXY_VIEW",
-    isBlurred: true,
-    isDemo: false
-  },
-  {
     index: 7,
-    title: "③ 그래프 스키마 & 쿼리 엔진 (2): 2-Hop Cypher 탐색의 의의",
+    title: "⑦ 그래프 스키마 & 쿼리 엔진: 2-Hop Cypher 탐색의 의의",
     subtitle: "RAG 컨텍스트 구성을 위한 실시간 그래프 트래버설 설계",
     bullets: [
       "질문에서 식별된 진입 조문(Center)을 기점으로 최대 2단계 연결된 이웃 관계망을 긁어오는 Cypher 실행",
       "1-Hop은 정보 유실이 심하며, 3-Hop 이상은 질문과 무관한 노이즈 데이터의 급격한 유입 발생",
       "2-Hop 탐색이 법률 문맥을 가장 정확하게 획득하는 최적의 엔지니어링 스위트 스팟(Suite Spot)",
-      "동적 서브그래프(Dynamic Subgraph)를 구성하여 Gemini 프롬프트 인젝션 파이프라인으로 안전하게 라우팅"
+      "동적 서브그래프(Dynamic Subgraph)를 구성하여 프롬프트 인젝션 파이프라인으로 안전하게 라우팅"
     ],
     visualType: "regex",
     "3dState": "STATE_GALAXY_VIEW",
@@ -124,17 +126,36 @@ const SLIDES: SlideData[] = [
   },
   {
     index: 8,
-    title: "🖥️ 데모 2: 조문 탐색 시각화",
-    subtitle: "피한정후견인의 행위 제13조 준용/예외 3D 레이저 빔 트래버설",
-    bullets: [],
-    visualType: "text",
+    title: "⑧ 초기 단순 검색 실패 원인 분석",
+    subtitle: "벡터 검색의 한계와 조문 고립 문제",
+    bullets: [
+      "단순 키워드 및 벡터 검색은 조문 내 텍스트 유사성만 측정하여 법조문 간의 준용 관계를 추적하지 못함",
+      "제13조 피한정후견인의 행위 검색 시 준용 조항인 제14조 및 예외 조항인 제16조 누락으로 법적 오판 유발",
+      "관련성 높은 지식이 고립 청크(Isolated Chunks)로 잔존하여 RAG 시스템의 신뢰도 붕괴"
+    ],
+    visualType: "summary",
     "3dState": "STATE_GRAPH_TRAVERSAL",
-    isBlurred: false,
-    isDemo: true
+    isBlurred: true,
+    isDemo: false
   },
   {
     index: 9,
-    title: "④ RAG 추론 파이프라인 (1): 4단계 실시간 추론 흐름",
+    title: "⑨ 데이터 적재 파이프라인 (4): 4단계 Neo4j 적재",
+    subtitle: "데이터 정합성 및 무중단 빌드를 보장하는 멱등성 벌크 적재",
+    bullets: [
+      "데이터 무효 유입 및 유실을 방지하기 위해 UNIQUE CONSTRAINT DDL 구조 선행 정의",
+      "500개 단위의 UNWIND Cypher 쿼리를 활용한 대용량 MERGE 배치 파이프라인 적재",
+      "총 1,118개 조문 노드, 1,034개 항 서브노드, 530개 온톨로지 엣지 적재 완수",
+      "비싼 LLM 호출 비용 ₩0원, 로컬 CPU 연산으로 단 3초 만에 전체 DB 구축 완료"
+    ],
+    visualType: "architecture",
+    "3dState": "STATE_GRAPH_TRAVERSAL",
+    isBlurred: true,
+    isDemo: false
+  },
+  {
+    index: 10,
+    title: "⑩ RAG 추론 파이프라인: 4단계 실시간 추론 흐름",
     subtitle: "지식 탐색(Neo4j)과 자연어 생성(Gemini)의 안전한 분할 설계",
     bullets: [
       "1단계: 사용자의 자연어 질문 접수 및 핵심 법률 조문 키워드 매핑",
@@ -148,48 +169,8 @@ const SLIDES: SlideData[] = [
     isDemo: false
   },
   {
-    index: 10,
-    title: "④ RAG 추론 파이프라인 (2): Context Injection & 프롬프트 설계",
-    subtitle: "환각(Hallucination) 통제 및 API 실패를 극복하는 Fallback 구조",
-    bullets: [
-      "System Prompt에 '제공된 그래프 컨텍스트 정보에만 전적으로 근거하여 500자 이내로 답하라'는 제약 주입",
-      "답변 작성 시 근거가 된 민법 제OO조 및 항 번호를 반드시 명시하도록 프롬프트 가이드라인 설계",
-      "Gemini API가 통신 에러 혹은 응답 지연 발생 시 백엔드에서 Groq Llama-3 클라이언트로 즉시 라우팅 전환",
-      "안정적인 무중단 서비스 제공을 위한 싱글톤 비동기 폴백(Fallback) 복원력 확보"
-    ],
-    visualType: "summary",
-    "3dState": "STATE_GRAPH_TRAVERSAL",
-    isBlurred: true,
-    isDemo: false
-  },
-  {
     index: 11,
-    title: "🖥️ 데모 3: 실시간 RAG 쿼리 시연",
-    subtitle: "토지 무단 구조물 설치 분쟁에 대한 실시간 GraphRAG 종합 보고서 생성",
-    bullets: [],
-    visualType: "text",
-    "3dState": "STATE_GRAPH_TRAVERSAL",
-    isBlurred: false,
-    isDemo: true
-  },
-  {
-    index: 12,
-    title: "⑤ 차별점 정리: 패러다임의 혁신",
-    subtitle: "범용성(Microsoft GraphRAG) vs 전문성(본 특화 GraphRAG)",
-    bullets: [
-      "MS GraphRAG: LLM으로 관계를 추출하므로 엄청난 빌드 비용 및 오랜 시간(수십 분) 소요",
-      "본 시스템: 고도로 정형화된 법률 문법에 맞춘 정규식 매칭을 적용하여 비용 ₩0원, 3초 만에 빌드 완료",
-      "MS GraphRAG: 커뮤니티 단위 요약문을 RAG에 활용하여 세부 디테일이 탈락할 리스크 존재",
-      "본 시스템: 조문 원문 텍스트를 고스란히 컨텍스트에 꽂아 팩트에 기반한 정교한 100% 진실성 실현"
-    ],
-    visualType: "comparison",
-    "3dState": "STATE_BENCHMARK_RADAR",
-    isBlurred: true,
-    isDemo: false
-  },
-  {
-    index: 13,
-    title: "⑥ 결론 및 아키텍처 비전",
+    title: "⑪ 대규모 벤치마크 평가 성과 및 결론",
     subtitle: "결정론적 지식 그래프와 확률론적 LLM의 아름다운 시너지",
     bullets: [
       "신뢰성이 생명인 법률/의료 전문 분야에서는 지식 그래프라는 단단한 규칙의 토대 구축이 선행되어야 함",
@@ -198,14 +179,14 @@ const SLIDES: SlideData[] = [
       "경청해 주셔서 감사합니다. (Q&A 세션 진행)"
     ],
     visualType: "summary",
-    "3dState": "STATE_GALAXY_VIEW",
+    "3dState": "STATE_BENCHMARK_RADAR",
     isBlurred: false,
     isDemo: false
   }
 ];
 
 // Mock Subgraph data for Demo 2 (Article 13 Traversal)
-const DEMO2_SUBGRAPH_DATA: DynamicSubgraphData = {
+export const DEMO2_SUBGRAPH_DATA: DynamicSubgraphData = {
   targetArticle: '13',
   nodes: [
     { id: '13', articleNumber: '제13조', title: '피한정후견인의 행위와 동의', summary: '피한정후견인의 권리 동의 범위', type: 'origin_node', fullText: '제13조(피한정후견인의 행위와 동의) ① 가정법원은 피한정후견인이 한정후견인의 동의를 받아야 하는 행위의 범위를 정할 수 있다...' },
@@ -221,7 +202,7 @@ const DEMO2_SUBGRAPH_DATA: DynamicSubgraphData = {
 };
 
 // Mock Subgraph data for Demo 3 (Real-time Query)
-const DEMO3_SUBGRAPH_DATA: DynamicSubgraphData = {
+export const DEMO3_SUBGRAPH_DATA: DynamicSubgraphData = {
   targetArticle: '214',
   nodes: [
     { id: '214', articleNumber: '제214조', title: '소유물방해제거, 방해예방청구권', summary: '소유자는 소유권을 방해하는 자에 방해 제거 청구 가능', type: 'origin_node', fullText: '제214조(소유물방해제거, 소유물방해예방청구권) 소유자는 소유권을 방해하는 자에 대하여 방해의 제거를 청구할 수 있고 소유권을 방해할 염려있는 행위를 하는 자에 대하여 그 예방이나 손해배상의 담보를 청구할 수 있다.' },
@@ -239,7 +220,7 @@ const DEMO3_SUBGRAPH_DATA: DynamicSubgraphData = {
 export default function LecturePage() {
   const [currentSlideIndex, setCurrentSlideIndex] = useState(1);
   const [isIntro, setIsIntro] = useState(true);
-  const [isMoving, setIsMoving] = useState(false);
+
   const [override3DState, setOverride3DState] = useState<GraphSystemState | null>(null);
   const currentSlide = SLIDES[currentSlideIndex - 1];
 
@@ -251,9 +232,9 @@ export default function LecturePage() {
 
   // Trigger 750ms dynamic blur bypass whenever slide changes
   useEffect(() => {
-    setIsMoving(true);
-    setOverride3DState(null); // Reset 3D state override on slide transitions
-    const timer = setTimeout(() => setIsMoving(false), 750);
+    const timer = setTimeout(() => {
+      setOverride3DState(null); // Reset 3D state override on slide transitions
+    }, 0);
     return () => clearTimeout(timer);
   }, [currentSlideIndex]);
 
@@ -284,10 +265,6 @@ export default function LecturePage() {
           setCurrentSlideIndex(10);
         } else if (e.key === 'q') {
           setCurrentSlideIndex(11);
-        } else if (e.key === 'w') {
-          setCurrentSlideIndex(12);
-        } else if (e.key === 'e') {
-          setCurrentSlideIndex(13);
         }
       }
     };
@@ -315,33 +292,22 @@ export default function LecturePage() {
   }, [nextSlide, prevSlide]);
 
   // Inject Mock Data depending on current slide
-  let activeSubgraph: DynamicSubgraphData | null = null;
-  if (currentSlideIndex === 8) {
-    activeSubgraph = DEMO2_SUBGRAPH_DATA;
-  } else if (currentSlideIndex === 11) {
-    activeSubgraph = DEMO3_SUBGRAPH_DATA;
-  }
-
-  const queryText = currentSlideIndex === 11
-    ? "다른 사람이 내 땅에 구조물을 설치했는데 법적으로 어떻게 해야 해?"
-    : null;
+  const activeSubgraph: DynamicSubgraphData | null = null;
+  const queryText = null;
 
   // Apply blur ONLY during motion transitions, clear completely (100% crisp) when settled/zoomed
   const active3DState = isIntro ? 'STATE_IDLE' : (override3DState || currentSlide["3dState"]);
   const isBlurredActive = false;
 
   return (
-    <main className="relative w-screen h-screen overflow-hidden bg-[#05070a] font-sans text-white select-none">
-      {/* Post-processing scanline overlay */}
-      <div className="absolute inset-0 pointer-events-none z-10 bg-[linear-gradient(rgba(18,16,16,0)_50%,rgba(0,0,0,0.25)_50%)] bg-[length:100%_4px] opacity-60" />
-
-      {/* 3D WebGL Canvas Layer */}
+    <main className="relative w-screen h-screen overflow-hidden bg-[#05070a]">
+      {/* 3D WebGL Canvas Layer — full screen, slides only */}
       <div className="absolute inset-0 z-0">
         <GraphCanvas
           state={active3DState}
           subgraphData={activeSubgraph}
           isBlurred={isBlurredActive}
-          panelOpen={currentSlideIndex === 11 && !isIntro}
+          panelOpen={false}
           currentQuery={queryText}
           currentSlideIndex={currentSlideIndex}
           isIntro={isIntro}
@@ -349,111 +315,14 @@ export default function LecturePage() {
           showEdgeBundle={true}
         />
       </div>
-
-      {/* Top Header */}
-      <div className="absolute top-6 left-8 right-8 z-30 flex justify-between items-center pointer-events-none">
-        <div className="flex items-center space-x-3 pointer-events-auto">
-          <div className="text-sm font-mono font-bold tracking-[3px] text-sky-400 drop-shadow-[0_0_10px_rgba(56,189,248,0.5)]">
-            GRAPHRAG // HELIX LABS
-          </div>
-          <span className="text-slate-600 font-mono text-xs">|</span>
-          <span className="text-[11px] font-mono text-slate-400">민법 1편-5편 지식 척추망</span>
-        </div>
-
-        <div className="flex items-center space-x-2 pointer-events-auto">
-          <span className="text-[11px] font-mono text-sky-300/60 mr-2">[ SCROLL OR DRAG TO EXPLORE HELIX ]</span>
-          <button
-            onClick={() => {
-              setCurrentSlideIndex(1);
-              setIsIntro(false);
-            }}
-            className="px-3 py-1.5 rounded-full border border-sky-500/30 bg-sky-950/40 text-sky-300 hover:text-white hover:border-sky-400 text-xs font-mono tracking-wider transition-all"
-          >
-            RESET
-          </button>
-        </div>
+      {/* ControlBar: visually hidden but mounted to keep AudioControlManager + YAMNet snap/voice recognition alive */}
+      <div className="fixed opacity-0 pointer-events-none -bottom-[9999px]" aria-hidden="true">
+        <ControlBar
+          currentState={active3DState}
+          onSetState={(state) => setOverride3DState(state)}
+          onSearchStart={() => setCurrentSlideIndex(11)}
+        />
       </div>
-
-      {/* Left Category Filter Sidebar */}
-      <div className="absolute top-24 left-8 z-30 hidden md:flex flex-col space-y-3 pointer-events-auto max-w-[220px]">
-        <div className="text-[11px] font-mono text-sky-400/60 tracking-widest uppercase">
-          FILTER BY CATEGORY
-        </div>
-        <div className="flex flex-col space-y-1.5 font-mono text-xs">
-          {[
-            { label: "→ 01 OVERVIEW", index: 1 },
-            { label: "→ 02 LIVE DEMO", index: 2 },
-            { label: "→ 03 INGESTION", index: 3 },
-            { label: "→ 06 SCHEMA", index: 6 },
-            { label: "→ 07 CYPHER 2-HOP", index: 7 },
-            { label: "→ 09 RAG ENGINE", index: 9 },
-            { label: "→ 10 COMPARISON", index: 10 },
-            { label: "→ 12 BENCHMARK", index: 12 },
-          ].map((cat) => (
-            <button
-              key={cat.index}
-              onClick={() => setCurrentSlideIndex(cat.index)}
-              className={`text-left py-1 px-2 rounded transition-all ${currentSlideIndex === cat.index
-                  ? 'text-sky-300 font-bold translate-x-1.5 drop-shadow-[0_0_8px_rgba(56,189,248,0.8)]'
-                  : 'text-slate-400/70 hover:text-sky-300 hover:translate-x-1'
-                }`}
-            >
-              {cat.label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Demo 3 Custom AI Response sliding panel overlay */}
-      <AnimatePresence>
-        {currentSlideIndex === 11 && (
-          <motion.div
-            initial={{ opacity: 0, x: 450 }}
-            animate={{ opacity: 1, x: 0 }}
-            exit={{ opacity: 0, x: 450 }}
-            transition={{ type: 'spring', damping: 25, stiffness: 120, delay: 1.2 }}
-            className="absolute top-8 right-8 bottom-24 z-30 w-full max-w-md rounded-2xl border border-white/10 bg-slate-950/85 p-6 shadow-2xl backdrop-blur-xl overflow-y-auto flex flex-col space-y-4"
-          >
-            <div className="flex items-center space-x-2 text-sky-400">
-              <FileText className="w-5 h-5" />
-              <h2 className="font-bold text-sm tracking-wider uppercase">AI 실시간 법률 보고서</h2>
-            </div>
-
-            <div className="p-3.5 bg-sky-500/10 border border-sky-500/20 rounded-xl text-sky-200 text-xs font-semibold leading-relaxed flex items-start space-x-2">
-              <CheckCircle2 className="w-4 h-4 text-sky-400 mt-0.5 flex-shrink-0" />
-              <span>질문: "다른 사람이 내 땅에 구조물을 설치했는데 법적으로 어떻게 해야 해?"</span>
-            </div>
-
-            <div className="text-slate-300 text-xs md:text-sm space-y-3.5 leading-relaxed font-normal">
-              <p>
-                타인이 귀하의 토지에 무단으로 구조물을 설치한 경우, 민법 <strong className="text-emerald-400">제214조(소유물방해제거청구권)</strong>에 의거하여 무단 설치물에 대한 철거 및 토지 인도를 청구할 수 있습니다.
-              </p>
-              <p>
-                동시에, 상대방이 토지를 무단 점유함으로써 얻은 이득에 대해서는 <strong className="text-sky-400">제741조(부당이득반환청구권)</strong>를 근거로 차임 상당액의 반환을 청구할 수 있으며, 고의 또는 과실로 인한 손해에 대해서는 <strong className="text-rose-400">제750조(불법행위로 인한 손해배상청구권)</strong>를 통해 손해배상을 청구할 수 있습니다.
-              </p>
-              <div className="p-3 bg-rose-500/5 rounded-xl border border-rose-500/10 text-rose-300 text-xs flex items-start space-x-2">
-                <AlertTriangle className="w-4 h-4 text-rose-400 mt-0.5 flex-shrink-0" />
-                <span>주의: 상대방이 20년 이상 소유의 의사로 점유를 지속할 경우, <strong>제245조(점유시효취득)</strong>에 의거 소유권을 침해받을 수 있으므로 신속한 권리 행사가 필요합니다.</span>
-              </div>
-            </div>
-
-            <div className="border-t border-white/5 pt-3.5 flex justify-between items-center text-[10px] text-slate-500">
-              <span>RAG Response: 0.28s</span>
-              <span>Gemini-1.5-Flash</span>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
-      {/* Floating Presentation Control bar (z-index 40) - Integrated voice/snap dashboard */}
-      <ControlBar
-        currentState={active3DState}
-        onSetState={(state) => setOverride3DState(state)}
-        onSearchStart={(queryText) => {
-          // Switch automatically to Demo 3 RAG Slide upon speech recognition trigger
-          setCurrentSlideIndex(11);
-        }}
-      />
     </main>
   );
 }
