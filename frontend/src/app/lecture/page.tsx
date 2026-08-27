@@ -618,9 +618,9 @@ export default function LecturePage() {
 
       {/* Whisper Speech Capture Visual HUD */}
       {isRecording && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center transition-all duration-300">
+        <div className="fixed inset-0 z-10 flex items-center justify-center transition-all duration-300">
           {/* Dim Overlay background */}
-          <div className="absolute inset-0 bg-[#020408]/85 backdrop-blur-md transition-opacity duration-300" />
+          <div className="absolute inset-0 bg-[#020408]/85 backdrop-blur-[2px] transition-opacity duration-300" />
 
           {/* Central-bottom small active orb HUD */}
           <div className="relative z-50 flex flex-col items-center gap-6 mt-[25vh]">

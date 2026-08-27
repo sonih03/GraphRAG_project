@@ -1,0 +1,2 @@
+﻿FROM jenkins/jenkins:lts
+RUN jenkins-plugin-cli --jenkins-update-center https://mirrors.tuna.tsinghua.edu.cn/jenkins/updates/update-center.json --plugins pipeline git github credentials-binding
