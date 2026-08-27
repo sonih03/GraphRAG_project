@@ -151,10 +151,8 @@ export function CameraController({
         camera.updateProjectionMatrix();
       }
 
-      // 엣지케이스 ③-2: 나선형 인접 메쉬 가림 방지를 위해 1.03배의 안전 마진 오프셋 거리를 추가
-      const distForH = ((CARD_H / 2) / tanHalfFov) * 1.03;             // 수직 기준 거리
-      const distForW = ((CARD_W / 2) / (aspect * tanHalfFov)) * 1.03;  // 수평 기준 거리
-      const camDist = Math.min(distForH, distForW);           // cover: 더 가까운 쪽 선택
+      // 수직 높이에 카메라를 정밀 밀착 (0.94 계수로 상하단 여백 완벽 소거)
+      const camDist = ((CARD_H / 2) / tanHalfFov) * 0.94;
 
       // 3. 카드가 위치한 나선형 바깥 반경(CARD_RADIUS + camDist)에 카메라 좌표 세팅
       const camX = Math.sin(angle) * (CARD_RADIUS + camDist);
