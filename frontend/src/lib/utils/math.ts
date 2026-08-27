@@ -39,8 +39,8 @@ export function generateTetrahedronClusters(radius: number = 4.2): THREE.Vector3
   return [v1, v2, v3, v4];
 }
 
-// Deterministic Mathematical Regular Tetrahedron Vertices (Radius R=3.1 for compact cohesive spacing)
-const TETRA_RADIUS = 3.1;
+// Deterministic Mathematical Regular Tetrahedron Vertices (Radius R=2.4 for full-screen DB mode fit)
+const TETRA_RADIUS = 2.8;
 const tetraVertices = generateTetrahedronClusters(TETRA_RADIUS);
 
 // 5 Part Cluster Definitions in 3D Space (Central Hub + Regular Tetrahedron)
@@ -80,12 +80,12 @@ export function getArticlePosition(num: number): THREE.Vector3 {
   const totalInCluster = cluster.range[1] - cluster.range[0] + 1;
   const goldenAngle = Math.PI * (3 - Math.sqrt(5));
   const y = 1 - (offsetIndex / Math.max(1, totalInCluster - 1)) * 2;
-  const r = Math.sqrt(Math.max(0, 1 - y * y)) * 0.62;
+  const r = Math.sqrt(Math.max(0, 1 - y * y)) * 0.50;
   const theta = offsetIndex * goldenAngle;
 
-  const px = cluster.center.x + Math.cos(theta) * r + Math.sin(num * 7.13) * 0.08;
-  const py = cluster.center.y + y * 0.58 + Math.cos(num * 3.77) * 0.08;
-  const pz = cluster.center.z + Math.sin(theta) * r + Math.sin(num * 5.41) * 0.08;
+  const px = cluster.center.x + Math.cos(theta) * r + Math.sin(num * 7.13) * 0.065;
+  const py = cluster.center.y + y * 0.48 + Math.cos(num * 3.77) * 0.065;
+  const pz = cluster.center.z + Math.sin(theta) * r + Math.sin(num * 5.41) * 0.065;
 
   return new THREE.Vector3(px, py, pz);
 }
@@ -167,15 +167,15 @@ export function generateOverviewPositions(pointCount: number) {
     const localIndex = Math.floor(i / 5);
     const localCount = Math.floor(pointCount / 5);
     const y = 1 - (localIndex / Math.max(1, localCount - 1)) * 2;
-    const r = Math.sqrt(Math.max(0, 1 - y * y)) * (0.55 + (i % 5) * 0.03);
+    const r = Math.sqrt(Math.max(0, 1 - y * y)) * (0.45 + (i % 5) * 0.025);
     const theta = (2 * Math.PI * localIndex) / goldenRatio;
 
-    const spreadX = Math.sin(i * 11.23) * 0.12;
-    const spreadY = Math.cos(i * 17.89) * 0.12;
-    const spreadZ = Math.sin(i * 23.45) * 0.12;
+    const spreadX = Math.sin(i * 11.23) * 0.10;
+    const spreadY = Math.cos(i * 17.89) * 0.10;
+    const spreadZ = Math.sin(i * 23.45) * 0.10;
 
     oPos[i * 3] = center.x + Math.cos(theta) * r + spreadX;
-    oPos[i * 3 + 1] = center.y + y * 0.58 + spreadY;
+    oPos[i * 3 + 1] = center.y + y * 0.48 + spreadY;
     oPos[i * 3 + 2] = center.z + Math.sin(theta) * r + spreadZ;
   }
 

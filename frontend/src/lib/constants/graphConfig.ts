@@ -22,5 +22,5 @@ export const GALAXY_CONFIG = {
     '#34d399', // 친족: Emerald
     '#fbbf24', // 상속: Amber
   ],
-  maxRadius: 7.0,
+  maxRadius: 4.5,
 };

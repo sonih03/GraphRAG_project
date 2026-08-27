@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
 import { useFrame } from '@react-three/fiber';
 import * as THREE from 'three';
 import { PARSED_SLIDES } from '@/lib/slidesData';
@@ -41,23 +41,82 @@ function namespaceSVGIds(svgString: string, prefix: string): string {
 }
 
 /**
- * Creates high-resolution 1920x1080 Texture from SVG code drawn onto a Canvas.
+ * Dynamically crops SVG viewBox based on a relative margin ratio.
+ * Falls back to 80, 80, 1760, 920 if no viewBox is found.
+ */
+function cropSVGViewBox(
+  svgString: string,
+  padding = 20,
+  fallbackViewBox = { x: 80, y: 80, width: 1760, height: 920 }
+): string {
+  if (typeof DOMParser === 'undefined') return svgString;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(svgString, 'image/svg+xml');
+  const svgElement = doc.querySelector('svg');
+
+  if (!svgElement) return svgString;
+
+  let cropX = fallbackViewBox.x;
+  let cropY = fallbackViewBox.y;
+  let cropWidth = fallbackViewBox.width;
+  let cropHeight = fallbackViewBox.height;
+
+  const existingViewBox = svgElement.getAttribute('viewBox');
+  if (existingViewBox) {
+    const viewBoxValues = existingViewBox.split(/[\s,]+/).map(Number);
+    if (viewBoxValues.length === 4 && !viewBoxValues.some(isNaN)) {
+      const [origX, origY, origW, origH] = viewBoxValues;
+      
+      // Proportional ratio scaling based on fallback values
+      const cropLeftRatio = fallbackViewBox.x / 1920; 
+      const cropTopRatio = fallbackViewBox.y / 1080;
+      const cropWidthRatio = fallbackViewBox.width / 1920;
+      const cropHeightRatio = fallbackViewBox.height / 1080;
+
+      const dynamicPaddingX = padding * (origW / 1920);
+      const dynamicPaddingY = padding * (origH / 1080);
+
+      cropX = Math.max(origX, origX + origW * cropLeftRatio - dynamicPaddingX);
+      cropY = Math.max(origY, origY + origH * cropTopRatio - dynamicPaddingY);
+      cropWidth = Math.min(origW, origW * cropWidthRatio + dynamicPaddingX * 2);
+      cropHeight = Math.min(origH, origH * cropHeightRatio + dynamicPaddingY * 2);
+    }
+  }
+
+  svgElement.setAttribute('viewBox', `${cropX} ${cropY} ${cropWidth} ${cropHeight}`);
+  svgElement.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svgElement.setAttribute('width', '100%');
+  svgElement.setAttribute('height', '100%');
+
+  // Inject precision rendering parameters to maximize sharpness
+  svgElement.setAttribute('text-rendering', 'geometricPrecision');
+  svgElement.setAttribute('shape-rendering', 'geometricPrecision');
+
+  const serializer = new XMLSerializer();
+  return serializer.serializeToString(doc);
+}
+
+/**
+ * Creates high-resolution Texture from SVG code drawn onto a Canvas.
  */
 function createSlideTextureFromSVG(svgString: string, slidePrefix: string): THREE.Texture {
+  const dpr = typeof window !== 'undefined' ? Math.max(window.devicePixelRatio || 1, 2) : 2;
   const canvas = document.createElement('canvas');
-  canvas.width = 1920;
-  canvas.height = 1080;
+  canvas.width = 1920 * dpr;
+  canvas.height = 1080 * dpr;
   const ctx = canvas.getContext('2d');
 
   const texture = new THREE.Texture(canvas);
-  texture.minFilter = THREE.LinearMipmapLinearFilter;
+  texture.colorSpace = THREE.SRGBColorSpace;
+  texture.minFilter = THREE.LinearFilter;
   texture.magFilter = THREE.LinearFilter;
-  texture.generateMipmaps = true;
+  texture.generateMipmaps = false;
 
   if (!svgString) return texture;
 
-  // Namespace all ids to avoid cross-slide filter/gradient conflicts
-  const namespacedSVG = namespaceSVGIds(svgString, slidePrefix);
+  // Crop viewBox dynamically and namespace all ids to avoid conflicts
+  const croppedSVG = cropSVGViewBox(svgString);
+  const namespacedSVG = namespaceSVGIds(croppedSVG, slidePrefix);
 
   const img = new Image();
   const blob = new Blob([namespacedSVG], { type: 'image/svg+xml;charset=utf-8' });
@@ -65,8 +124,12 @@ function createSlideTextureFromSVG(svgString: string, slidePrefix: string): THRE
 
   img.onload = () => {
     if (ctx) {
-      ctx.clearRect(0, 0, 1920, 1080);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.scale(dpr, dpr);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
       ctx.drawImage(img, 0, 0, 1920, 1080);
+      ctx.setTransform(1, 0, 0, 1, 0, 0); // reset scale
       texture.needsUpdate = true;
     }
     URL.revokeObjectURL(url);
@@ -86,9 +149,7 @@ function createSlideTextureFromSVG(svgString: string, slidePrefix: string): THRE
  * Maps lecture slots (1-11) to the corresponding PARSED_SLIDES indexes.
  */
 function getSVGCodeForSlideIndex(lectureIndex: number): string {
-  const targetIndexes = [1, 2, 3, 6, 7, 8, 9, 11, 12, 13, 14];
-  const targetIndex = targetIndexes[lectureIndex - 1] ?? 1;
-  const found = PARSED_SLIDES.find(s => s.index === targetIndex);
+  const found = PARSED_SLIDES.find(s => s.index === lectureIndex);
   return found ? found.svgCode : '';
 }
 
@@ -113,12 +174,41 @@ export function HelixSpiralDeck({ currentSlideIndex, onSlideChange }: HelixSpira
     targetScrollRef.current = currentSlideIndex - 1;
   }, [currentSlideIndex]);
 
-  // Pre-generate textures for all slides
-  const textures = useMemo(() => {
-    return LECTURE_SLIDES.map((slide) => {
-      const svgCode = getSVGCodeForSlideIndex(slide.index);
-      return createSlideTextureFromSVG(svgCode, `s${slide.index}`);
-    });
+  const [textures, setTextures] = useState<THREE.Texture[]>([]);
+
+  // Pre-generate textures for all slides (async web font check + cleanup memory leak)
+  useEffect(() => {
+    let active = true;
+    const loadedTextures: THREE.Texture[] = [];
+
+    const loadAllTextures = async () => {
+      // 엣지케이스 ②: 웹 폰트(Pretendard 등) 로드 완료 보장
+      if (typeof document !== 'undefined' && document.fonts) {
+        await document.fonts.ready;
+      }
+
+      const texs = LECTURE_SLIDES.map((slide) => {
+        const svgCode = getSVGCodeForSlideIndex(slide.index);
+        return createSlideTextureFromSVG(svgCode, `s${slide.index}`);
+      });
+
+      if (active) {
+        loadedTextures.push(...texs);
+        setTextures(texs);
+      } else {
+        texs.forEach(tex => tex.dispose());
+      }
+    };
+
+    loadAllTextures();
+
+    return () => {
+      active = false;
+      // 엣지케이스 ①: WebGL 텍스처 메모리 누수 방지 (cleanup)
+      loadedTextures.forEach((tex) => {
+        if (tex) tex.dispose();
+      });
+    };
   }, []);
 
   // Geometry for 3D card planes (adjusted for 16:9 aspect ratio)
@@ -230,7 +320,7 @@ export function HelixSpiralDeck({ currentSlideIndex, onSlideChange }: HelixSpira
 
   return (
     <group ref={groupRef}>
-      {LECTURE_SLIDES.map((slide, idx) => (
+      {textures.length > 0 && LECTURE_SLIDES.map((slide, idx) => (
         <mesh key={slide.index} geometry={cardGeometry}>
           <meshBasicMaterial
             map={textures[idx]}

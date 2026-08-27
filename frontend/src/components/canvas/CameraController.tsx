@@ -14,11 +14,11 @@ import { GraphSystemState, DynamicSubgraphData } from '@/types/graph';
  * PANEL_WORLD_SHIFT units left to compensate the panel occupying the right side.
  */
 const CARD_RADIUS = 3.2;
-const Y_SPACING   = 2.5;
-const ANGLE_STEP  = 0.75;
+const Y_SPACING = 2.5;
+const ANGLE_STEP = 0.75;
 // Card geometry from HelixSpiralDeck: PlaneGeometry(4.0, 2.25) at FOV 48
-const CARD_W  = 4.0;
-const CARD_H  = 2.25;
+const CARD_W = 4.0;
+const CARD_H = 2.25;
 const CAM_FOV = 48; // degrees — matches <Canvas camera={{ fov: 48 }}>
 
 interface CameraControllerProps {
@@ -90,8 +90,12 @@ export function CameraController({
     // Main RAG Homepage (http://localhost:3000): 100% Identical to /lecture IDLE camera [0, 0, 6.8]
     switch (state) {
       case 'STATE_GALAXY_VIEW':
-      case 'STATE_QUERYING':
       case 'STATE_GRAPH_TRAVERSAL':
+        // DB 모드 및 탐색 뷰: 동일한 은하 프레이밍 (클러스터 확장 반영)
+        targetCamPos.current.set(0, 0.5, 8.4);
+        targetLookAt.current.set(0, 0.5, 0);
+        break;
+      case 'STATE_QUERYING':
       case 'STATE_VECTOR_SEARCH':
         targetCamPos.current.set(0, 0, 11.5);
         targetLookAt.current.set(0, 0, 0);
@@ -122,7 +126,7 @@ export function CameraController({
     };
   }, []);
 
-  useFrame((state, delta) => {
+  useFrame((rootState, delta) => {
     const isPresentationMode = currentSlideIndex !== undefined;
 
     if (isPresentationMode) {
@@ -137,12 +141,20 @@ export function CameraController({
       // 2. 현재 캔버스의 실제 종횡비로 화면을 꽉 채우는 거리를 동적 계산 (cover 모드)
       //    Math.min → 더 가까운 거리 선택 = 작은 방향이 꽉 참 (CSS object-fit: cover 와 동일)
       //    16:9 이외 비율에서는 한쪽 방향이 약간 잘릴 수 있으나 항상 풀사이즈로 보임
-      const aspect = state.size.width / state.size.height;
+      const aspect = rootState.size.width / rootState.size.height;
       const halfFovRad = (CAM_FOV * Math.PI) / 180 / 2;
       const tanHalfFov = Math.tan(halfFovRad);
-      const distForH = (CARD_H / 2) / tanHalfFov;             // 수직 기준 거리
-      const distForW = (CARD_W / 2) / (aspect * tanHalfFov);  // 수평 기준 거리
-      const camDist  = Math.min(distForH, distForW);           // cover: 더 가까운 쪽 선택
+
+      // 엣지케이스 ③: 카메라 Near Clipping Plane 조정 (0.05 이하 확보)
+      if (camera instanceof THREE.PerspectiveCamera && camera.near > 0.05) {
+        camera.near = 0.05;
+        camera.updateProjectionMatrix();
+      }
+
+      // 엣지케이스 ③-2: 나선형 인접 메쉬 가림 방지를 위해 1.03배의 안전 마진 오프셋 거리를 추가
+      const distForH = ((CARD_H / 2) / tanHalfFov) * 1.03;             // 수직 기준 거리
+      const distForW = ((CARD_W / 2) / (aspect * tanHalfFov)) * 1.03;  // 수평 기준 거리
+      const camDist = Math.min(distForH, distForW);           // cover: 더 가까운 쪽 선택
 
       // 3. 카드가 위치한 나선형 바깥 반경(CARD_RADIUS + camDist)에 카메라 좌표 세팅
       const camX = Math.sin(angle) * (CARD_RADIUS + camDist);
@@ -157,9 +169,10 @@ export function CameraController({
     } else {
       if (!controlsRef.current) return;
       if (isTransitioning.current) {
-        // Smooth lerp — slightly faster (4.0) so the panel shift feels snappy
-        camera.position.lerp(targetCamPos.current, 4.0 * delta);
-        controlsRef.current.target.lerp(targetLookAt.current, 4.0 * delta);
+        // Galaxy 모드와 Traversal 모드는 빠르게 snap, 나머지는 부드럽게 lerp
+        const lerpSpeed = (state === 'STATE_GALAXY_VIEW' || state === 'STATE_GRAPH_TRAVERSAL') ? 6.0 : 4.0;
+        camera.position.lerp(targetCamPos.current, lerpSpeed * delta);
+        controlsRef.current.target.lerp(targetLookAt.current, lerpSpeed * delta);
 
         if (camera.position.distanceTo(targetCamPos.current) < 0.04) {
           isTransitioning.current = false;

@@ -180,7 +180,7 @@ const SLIDES: SlideData[] = [
       "경청해 주셔서 감사합니다. (Q&A 세션 진행)"
     ],
     visualType: "summary",
-    "3dState": "STATE_BENCHMARK_RADAR",
+    "3dState": "STATE_GALAXY_VIEW",
     isBlurred: false,
     isDemo: false
   }
@@ -223,7 +223,7 @@ export default function LecturePage() {
   const [isIntro, setIsIntro] = useState(true);
 
   const [override3DState, setOverride3DState] = useState<GraphSystemState | null>(null);
-  
+
   // RAG & Voice recognition states
   const [subgraphData, setSubgraphData] = useState<DynamicSubgraphData | null>(null);
   const [legalAnswer, setLegalAnswer] = useState<string | null>(null);
@@ -237,6 +237,10 @@ export default function LecturePage() {
 
   const audioManagerRef = useRef<AudioControlManager | null>(null);
   const queryStartRef = useRef<number>(0);
+  // DB 모드 진입 직전 슬라이드 인덱스 스냅샷
+  const lastSlideBeforeDBRef = useRef<number>(1);
+  // stale closure 방지: override3DState 최신값 ref
+  const override3DStateRef = useRef<GraphSystemState | null>(null);
 
   const currentSlide = SLIDES[currentSlideIndex - 1];
 
@@ -246,10 +250,16 @@ export default function LecturePage() {
     return () => clearTimeout(timer);
   }, []);
 
-  // Trigger 750ms dynamic blur bypass whenever slide changes
+  // override3DStateRef 항상 최신 상태 동기
   useEffect(() => {
+    override3DStateRef.current = override3DState;
+  }, [override3DState]);
+
+  // 슬라이드 변경 시 override 리셋 — 단, DB 모드 중에는 리셋 차단
+  useEffect(() => {
+    if (override3DStateRef.current === 'STATE_GALAXY_VIEW') return;
     const timer = setTimeout(() => {
-      setOverride3DState(null); // Reset 3D state override on slide transitions
+      setOverride3DState(null);
     }, 0);
     return () => clearTimeout(timer);
   }, [currentSlideIndex]);
@@ -286,12 +296,21 @@ export default function LecturePage() {
     };
 
     // Custom Event triggers from Double/Triple snap detection
+    // DB 모드(Galaxy View) 중에는 더블탭으로 슬라이드 이동 차단 (ref로 stale closure 방지)
     const handleSlideNext = () => {
+      if (override3DStateRef.current === 'STATE_GALAXY_VIEW') {
+        console.log("[Lecture Page] slide-next blocked: DB mode active");
+        return;
+      }
       console.log("[Lecture Page] Received slide-next event");
       nextSlide();
     };
 
     const handleSlidePrev = () => {
+      if (override3DStateRef.current === 'STATE_GALAXY_VIEW') {
+        console.log("[Lecture Page] slide-prev blocked: DB mode active");
+        return;
+      }
       console.log("[Lecture Page] Received slide-prev event");
       prevSlide();
     };
@@ -374,16 +393,18 @@ export default function LecturePage() {
     const normalized = text.toLowerCase().replace(/\s+/g, '').trim(); // 공백 제거 전처리
     console.log(`[Lecture Voice] Normalized command evaluated: "${normalized}"`);
 
-    // 1. "원래페이지로" / 원래 페이지로 / 슬라이드로 / 원래대로 복귀
+    // 1. "슬라이드로" / 원래페이지로 / 원래대로 복귀 → DB 진입 전 슬라이드로 정확히 복귀
     if (
       normalized.includes('원래페이지로') ||
       normalized.includes('원래페이지') ||
       normalized.includes('원래대로') ||
       normalized.includes('슬라이드로') ||
       normalized.includes('현재페이지로') ||
+      normalized.includes('슬라이드') ||
       normalized.includes('현재페이지')
     ) {
-      console.log("[Lecture Voice] Action: Return to last slide");
+      console.log(`[Lecture Voice] Action: Return to slide ${lastSlideBeforeDBRef.current} (before DB mode)`);
+      setCurrentSlideIndex(lastSlideBeforeDBRef.current);
       setOverride3DState(null);
       setSubgraphData(null);
       setLegalAnswer(null);
@@ -391,7 +412,7 @@ export default function LecturePage() {
       return;
     }
 
-    // 2. "데이터베이스" / 데이터 베이스 / db구조 / 디비구조 전환
+    // 2. "데이터베이스" / db구조 / 디비구조 전환 → 진입 전 슬라이드 인덱스 스냅샷 저장
     if (
       normalized.includes('데이터베이스') ||
       normalized.includes('데이터베이스구조') ||
@@ -400,6 +421,7 @@ export default function LecturePage() {
       normalized.includes('데이터마이스') ||
       normalized.includes('데이터위스') ||
       normalized.includes('대이터') ||
+      normalized.includes('데이터') ||
       normalized.includes('전체구조') ||
       normalized.includes('db구조') ||
       normalized.includes('디비구조') ||
@@ -407,21 +429,41 @@ export default function LecturePage() {
       normalized.includes('디비') ||
       normalized.includes('은하')
     ) {
-      console.log("[Lecture Voice] Action: View Galaxy DB Structure");
+      console.log(`[Lecture Voice] Action: View Galaxy DB Structure (saving slide ${currentSlideIndex})`);
+      lastSlideBeforeDBRef.current = currentSlideIndex;
       setOverride3DState('STATE_GALAXY_VIEW');
       setSubgraphData(null);
       setLegalAnswer(null);
       return;
     }
 
-    // 3. Fallback: Legal RAG Query
-    await executeRAGQuery(text);
+    // 3. RAG 쿼리 트리거: "어떻게 해야돼?" / 변형 오인식 포함
+    //    문장 끝에 트리거 구가 포함되어 있으면 전체 발화를 GraphRAG 쿼리로 실행
+    if (
+      normalized.includes('어떻게해야돼') ||
+      normalized.includes('어떻게해야해') ||
+      normalized.includes('어떻게하면돼') ||
+      normalized.includes('어떻게하면해') ||
+      normalized.includes('어떻게해야될까') ||
+      normalized.includes('어떻게해야하나') ||
+      normalized.includes('어떻게해야하나요') ||
+      normalized.includes('어떻게해야되나') ||
+      normalized.includes('어떻게해야되나요')
+    ) {
+      console.log(`[Lecture Voice] Action: RAG Query triggered — "${text}"`);
+      lastSlideBeforeDBRef.current = currentSlideIndex; // 복귀 대상 슬라이드 저장
+      await executeRAGQuery(text);
+      return;
+    }
+
+    // 4. 매칭 명령어 없음 — 강의 모드에서는 오인식 텍스트로 RAG 쿼리를 실행하지 않음
+    console.log(`[Lecture Voice] Unrecognized command: "${normalized}" — ignoring (no fallback RAG in lecture mode)`);
   };
 
   // Process voice transcription outcome from AudioControlManager
   const processVoiceResult = async (transcript: string) => {
     const cleanText = transcript.trim();
-    
+
     // Ignore Whisper typical silent hallucination
     const cleanNoSymbol = cleanText.replace(/[.\s]/g, '').trim();
     if (cleanNoSymbol === '감사합니다' || cleanNoSymbol === 'thankyou' || cleanNoSymbol === '감사합니다.') {
@@ -535,6 +577,13 @@ export default function LecturePage() {
   // Apply blur ONLY during motion transitions, clear completely (100% crisp) when settled/zoomed
   const active3DState = isIntro ? 'STATE_IDLE' : (override3DState || currentSlide["3dState"]);
   const isBlurredActive = false;
+  // 슬라이드 카드 & EdgeBundle 숨김 기준:
+  //   DB 은하 뷰 + RAG 쿼리/탐색 모드 모두 fullscreen 3D 그래프 모드로 처리
+  const isFullscreenGraphMode =
+    override3DState === 'STATE_GALAXY_VIEW' ||
+    override3DState === 'STATE_QUERYING' ||
+    override3DState === 'STATE_GRAPH_TRAVERSAL' ||
+    override3DState === 'STATE_VECTOR_SEARCH';
 
   return (
     <main className="relative w-screen h-screen overflow-hidden bg-[#05070a]">
@@ -546,10 +595,10 @@ export default function LecturePage() {
           isBlurred={isBlurredActive}
           panelOpen={subgraphData !== null}
           currentQuery={queryText}
-          currentSlideIndex={currentSlideIndex}
+          currentSlideIndex={isFullscreenGraphMode ? undefined : currentSlideIndex}
           isIntro={isIntro}
           onSlideChange={(idx) => setCurrentSlideIndex(idx)}
-          showEdgeBundle={true}
+          showEdgeBundle={!isFullscreenGraphMode}
         />
       </div>
 
@@ -572,7 +621,7 @@ export default function LecturePage() {
         <div className="fixed inset-0 z-40 flex items-center justify-center transition-all duration-300">
           {/* Dim Overlay background */}
           <div className="absolute inset-0 bg-[#020408]/85 backdrop-blur-md transition-opacity duration-300" />
-          
+
           {/* Central-bottom small active orb HUD */}
           <div className="relative z-50 flex flex-col items-center gap-6 mt-[25vh]">
             <div className="w-[320px] h-[320px] relative bg-transparent">
@@ -583,15 +632,14 @@ export default function LecturePage() {
                 bgTransparent={true}
               />
             </div>
-            
+
             {/* Transcript Text Glassmorphic Box */}
             <div className="min-w-[280px] max-w-[500px] border border-cyan-500/20 bg-slate-950/75 backdrop-blur-2xl rounded-2xl px-6 py-3.5 text-center text-slate-100 shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-all duration-300">
-              <span className={`text-sm tracking-wide font-sans ${
-                speechState === 'LISTENING' ? 'text-cyan-400 animate-pulse font-medium' :
+              <span className={`text-sm tracking-wide font-sans ${speechState === 'LISTENING' ? 'text-cyan-400 animate-pulse font-medium' :
                 speechState === 'PROCESSING' ? 'text-amber-400 font-medium' :
-                speechState === 'SUCCESS' ? 'text-emerald-400 font-bold' :
-                'text-rose-400'
-              }`}>
+                  speechState === 'SUCCESS' ? 'text-emerald-400 font-bold' :
+                    'text-rose-400'
+                }`}>
                 {speechTranscript}
               </span>
             </div>
